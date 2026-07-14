@@ -1,0 +1,100 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+
+namespace PromVesServer.Service
+{
+    public class TcpServerService
+    {
+        private readonly ILogger<TcpServerService> _logger;
+        private readonly CounterStorageService _storage;
+        private TcpListener? _listener;
+        private int Port = 5002;
+        public TcpServerService(ILogger<TcpServerService> logger, CounterStorageService storage)
+        { 
+            _logger = logger;
+            _storage = storage;
+        }
+
+        public async Task StartAsync(CancellationToken cancellationToken)
+        {
+            // Получаем локальный IP
+            IPAddress ipAddress = GetLocalIPAddress();
+            _listener = new TcpListener(ipAddress, Port);
+            _listener.Start();
+
+            _logger.LogInformation("TCP сервер запущен: {ip}:{port}", ipAddress, Port);
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    TcpClient client = await _listener.AcceptTcpClientAsync(cancellationToken);
+
+                    await HandleClientAsync(client, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Ошибка TCP сервера");
+                }
+            }
+
+            _listener.Stop();
+
+            _logger.LogInformation("TCP сервер остановлен");
+        }
+        private async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
+        {
+            try
+            {
+                IPEndPoint? remote = client.Client.RemoteEndPoint as IPEndPoint;
+                NetworkStream stream = client.GetStream();
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    
+
+                    _logger.LogInformation("Подключился клиент {ip}:{port}",
+                        remote?.Address,
+                        remote?.Port);
+
+                    
+
+                    byte[] buffer = Encoding.UTF8.GetBytes(_storage.GetMessage());
+
+                    await stream.WriteAsync(buffer, cancellationToken);
+
+                    _logger.LogInformation("Сообщение отправлено");
+
+                    Task.Delay(10);
+                }
+                
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка отправки");
+            }
+            finally
+            {
+               // client.Close();
+            }
+        }
+        private static IPAddress GetLocalIPAddress()
+        {
+            var host = Dns.GetHostEntry(Dns.GetHostName());
+
+            foreach (IPAddress ip in host.AddressList)
+            {
+                if (ip.AddressFamily == AddressFamily.InterNetwork)
+                    return ip;
+            }
+
+            throw new Exception("Локальный IPv4 адрес не найден.");
+        }
+    }
+}
