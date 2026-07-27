@@ -16,7 +16,7 @@ namespace PromVesServer.Service
         private readonly ILogger<ComPortService> _logger;
         //обьект класса, который записывает значеник com портов
         private readonly CounterStorageService _storage;
-        private readonly StringBuilder _buffer = new();
+        //private readonly StringBuilder _buffer = new();
         public ComPortService(SerialPortSettingsModel settings, ILogger<ComPortService> logger, CounterStorageService storage)
         {
             //Индификатор порта
@@ -40,7 +40,7 @@ namespace PromVesServer.Service
 
         }
 
-        private const int PacketSize = 11;
+        //private const int PacketSize = 11;
 
         public async Task ConnectSerialPort(CancellationToken cancellationToken)
         {
@@ -53,10 +53,13 @@ namespace PromVesServer.Service
                     _serialPort.Open();
 
                     _logger.LogInformation("Подключили {Port}", NamePort);
+                    byte[] oneByte = new byte[1];
+                    byte[] packet = new byte[11];
+                    
                     while (!cancellationToken.IsCancellationRequested)
                     {
                         // ---------- Ищем начало пакета ----------
-                        byte[] oneByte = new byte[1];
+                        //byte[] oneByte = new byte[1];
 
                         do
                         {
@@ -70,7 +73,7 @@ namespace PromVesServer.Service
                         } while (oneByte[0] != 0x02);
 
                         // ---------- Нашли STX ----------
-                        byte[] packet = new byte[11];
+                        //byte[] packet = new byte[11];
                         packet[0] = 0x02;
 
                         int received = 1;

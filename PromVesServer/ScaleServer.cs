@@ -46,6 +46,13 @@ namespace PromVesServer
             TcpServerService tcp = new TcpServerService(readerLoggerTcpServerService, _storage);
             //добавляем работу TCP/IP сервера в колекцию задач
             tasks.Add(tcp.StartAsync(stoppingToken));
+
+            //отдельный логер для класса FileService
+            var readerLoggerFileService = _loggerFactory.CreateLogger<FileService>();
+            FileService _fileService = new FileService(readerLoggerFileService, _storage);
+            //добавляем работу изменения файла 1С сервера в колекцию задач
+            tasks.Add(_fileService.LoadAsync(stoppingToken));
+
             //запускаем все задачи
             await Task.WhenAll(tasks);
             //while (!stoppingToken.IsCancellationRequested)

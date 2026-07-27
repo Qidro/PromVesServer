@@ -69,9 +69,9 @@ namespace PromVesServer.Service
 
                     await stream.WriteAsync(buffer, cancellationToken);
 
-                    _logger.LogInformation("Сообщение отправлено");
+                    //_logger.LogInformation("Сообщение отправлено");
 
-                    Task.Delay(10);
+                    await Task.Delay(100, cancellationToken);
                 }
                 
             }
@@ -81,7 +81,7 @@ namespace PromVesServer.Service
             }
             finally
             {
-               // client.Close();
+               client.Close();
             }
         }
         private static IPAddress GetLocalIPAddress()
