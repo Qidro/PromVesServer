@@ -57,14 +57,14 @@ namespace PromVesServer.Service
                 NetworkStream stream = client.GetStream();
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    
 
-                    _logger.LogInformation("Подключился клиент {ip}:{port}",
-                        remote?.Address,
-                        remote?.Port);
 
-                    
+                    //_logger.LogInformation("Подключился клиент {ip}:{port}",
+                    //    remote?.Address,
+                    //    remote?.Port);
 
+
+                    //var DateTime.UtcNow - LastUpdate
                     byte[] buffer = Encoding.UTF8.GetBytes(_storage.GetMessage());
 
                     await stream.WriteAsync(buffer, cancellationToken);
