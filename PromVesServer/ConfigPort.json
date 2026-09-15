@@ -7,7 +7,8 @@
       "DataBits": 8,
       "Parity": "None",
       "StopBits": "One",
-      "Handshake": "None"
+      "Handshake": "None",
+      "slaveAddress": 4
     },
     {
       "Id": 2,
@@ -16,7 +17,8 @@
       "DataBits": 8,
       "Parity": "None",
       "StopBits": "One",
-      "Handshake": "None"
+      "Handshake": "None",
+      "slaveAddress": 2
     },
     {
       "Id": 3,
@@ -25,7 +27,8 @@
       "DataBits": 8,
       "Parity": "None",
       "StopBits": "One",
-      "Handshake": "None"
+      "Handshake": "None",
+      "slaveAddress": 1
     },
     {
       "Id": 4,
@@ -34,7 +37,8 @@
       "DataBits": 8,
       "Parity": "None",
       "StopBits": "One",
-      "Handshake": "None"
+      "Handshake": "None",
+      "slaveAddress": 3
     }
   ]
 }

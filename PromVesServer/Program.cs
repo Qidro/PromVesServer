@@ -13,8 +13,8 @@ builder.Configuration
         reloadOnChange: true);
 
 builder.Services.AddHostedService<ScaleServer>();
+builder.Services.AddSingleton<ConfiguratorService>();
 builder.Services.AddSingleton<CounterStorageService>();
-
 var host = builder.Build();
 
 host.Run();

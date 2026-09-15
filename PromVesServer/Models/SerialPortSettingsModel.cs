@@ -14,5 +14,7 @@ namespace PromVesServer.Models
         public Parity Parity { get; set; }
         public StopBits StopBits { get; set; }
         public Handshake Handshake { get; set; }
+
+        public int slaveAddress { get; set; }
     }
 }

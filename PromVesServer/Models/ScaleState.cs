@@ -6,10 +6,11 @@ namespace PromVesServer.Models
 {
     class ScaleState
     {
+        //вес
         public int Weight { get; set; }
-
+        //последнее обновление веса
         public DateTime LastUpdate { get; set; }
-
+        //есть ли сигнал с веса (5 секунд)
         public bool Online =>
         DateTime.UtcNow - LastUpdate <= TimeSpan.FromSeconds(5);
     }

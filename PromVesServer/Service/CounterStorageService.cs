@@ -13,6 +13,7 @@ namespace PromVesServer.Service
         //обновление значения по Id
         public void UpdateValue(int portId, int value)
         {
+            //добовляем новое ключ значение, если его не было, или обновляем его значения
             lock (_lock)
             {
                 if (!_values.ContainsKey(portId))
@@ -38,6 +39,8 @@ namespace PromVesServer.Service
                 //    }
                 //}
 
+                //сортировка по ключам и слияния их в стандарт (пример: 123;132;321;312)
+                //если с весами с одного com порта нет соединения, то строка будет такая: 123;132;321;OFFLINE
                 return string.Join(";", _values
                 .OrderBy(x => x.Key)
                 .Select(x => x.Value.Online

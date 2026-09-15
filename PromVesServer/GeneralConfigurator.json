@@ -1,0 +1,9 @@
+{
+  "GeneralConfigurator": {
+    "ModbusTcp": false,
+    "ModbusRtu": true,
+    "St": false,
+    "GreenBoard": false,
+    "YHLBoard": true
+  }
+}
