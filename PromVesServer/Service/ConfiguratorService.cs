@@ -15,7 +15,7 @@ namespace PromVesServer.Service
             _logger = logger;
         }
 
-        public ServiceResult<GeneralConfiguratorModel> GetConfig()
+        public ServiceResult<GeneralConfiguratorModel> GetConfigProtocol()
         {
             //var json = File.ReadAllText("GeneralConfigurator.json");
 
@@ -114,6 +114,67 @@ namespace PromVesServer.Service
                 Console.WriteLine($"StackTrace: {ex.StackTrace}");
                 return ServiceResult<GeneralConfiguratorModel>.Fail(ex.Message);
             }
+        }
+
+        //метод получения настроек для протокола ModbusTcp
+        public async Task<ServiceResult<List<ModbusTcpSettingModel>>> GetModbusTcpSettingAsync()
+        {
+            try
+            {
+                //считываем файл
+                string json = await File.ReadAllTextAsync("ConfigModbusTcp.json");
+
+                ModbusTcpSettingRoot config =
+                    JsonSerializer.Deserialize<ModbusTcpSettingRoot>(json)
+                    ?? new ModbusTcpSettingRoot();
+                foreach (var setting in config.ModbusTcpSetting)
+                {
+                    Console.WriteLine($"Id: {setting.Id}");
+                    Console.WriteLine($"IP: {setting.NportIp}");
+                    Console.WriteLine($"Port: {setting.NportPort}");
+                    Console.WriteLine($"SlaveId: {setting.SlaveId}");
+                }
+                return ServiceResult<List<ModbusTcpSettingModel>>.Ok(config.ModbusTcpSetting);
+            }
+            catch (FileNotFoundException ex)
+            {
+                Console.WriteLine($"Файл не найден: {ex.Message}");
+                return ServiceResult<List<ModbusTcpSettingModel>>.Fail(ex.Message);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Console.WriteLine(
+                    $"Нет доступа к файлу конфигурации: {ex.Message}");
+                return ServiceResult<List<ModbusTcpSettingModel>>.Fail(ex.Message);
+            }
+            catch (DirectoryNotFoundException ex)
+            {
+                Console.WriteLine(
+                    $"Директория не найдена: {ex.Message}");
+                return ServiceResult<List<ModbusTcpSettingModel>>.Fail(ex.Message);
+            }
+            catch (IOException ex)
+            {
+                Console.WriteLine(
+                    $"Ошибка ввода-вывода при работе с файлом: {ex.Message}");
+                return ServiceResult<List<ModbusTcpSettingModel>>.Fail(ex.Message);
+            }
+            catch (InvalidDataException ex)
+            {
+                Console.WriteLine(
+                    $"Некорректные данные конфигурации: {ex.Message}");
+                return ServiceResult<List<ModbusTcpSettingModel>>.Fail(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(
+                    $"Непредвиденная ошибка при загрузке конфигурации: {ex.Message}");
+
+                Console.WriteLine($"Тип ошибки: {ex.GetType().FullName}");
+                Console.WriteLine($"StackTrace: {ex.StackTrace}");
+                return ServiceResult<List<ModbusTcpSettingModel>>.Fail(ex.Message);
+            }
+
         }
     }
 }

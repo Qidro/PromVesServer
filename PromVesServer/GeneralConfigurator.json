@@ -1,7 +1,7 @@
 {
   "GeneralConfigurator": {
-    "ModbusTcp": false,
-    "ModbusRtu": true,
+    "ModbusTcp": true,
+    "ModbusRtu": false,
     "St": false,
     "GreenBoard": false,
     "YHLBoard": true

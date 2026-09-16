@@ -13,7 +13,10 @@ namespace PromVesServer
         private readonly CounterStorageService _storage;
         //
         private readonly ConfiguratorService _configuratorService;
-        public ScaleServer(IConfiguration configuration, ILogger<ScaleServer> logger, ILoggerFactory loggerFactory, CounterStorageService storage, ConfiguratorService configuratorService)
+        //конфигурацич modbus
+        //private readonly ModbusTcpService _modbusTcpService;
+        public ScaleServer(IConfiguration configuration, ILogger<ScaleServer> logger, ILoggerFactory loggerFactory, 
+            CounterStorageService storage, ConfiguratorService configuratorService)
         {
             _configuration = configuration;
             _logger = logger;
@@ -29,8 +32,8 @@ namespace PromVesServer
             .Get<List<SerialPortSettingsModel>>();
             //лист, где будут храниться ссылки на фоновые операции
             var tasks = new List<Task>();
-            //получаем конфигурацию
-            var resutConfig = _configuratorService.GetConfig();
+            //получаем конфигурацию протоколов
+            var resutConfig = _configuratorService.GetConfigProtocol();
             //проверяем на успешность
             if (resutConfig.Success == false)
             {
@@ -42,6 +45,7 @@ namespace PromVesServer
                 resutConfig.Data.YHLBoard = false;
                 resutConfig.Data.GreenBoard = false;
             }
+
             //проверяем заданные параметры
             if (resutConfig.Data.ModbusRtu == true || resutConfig.Data.St == true)
             {
@@ -60,6 +64,35 @@ namespace PromVesServer
                     //создание нового компонента в List
                     tasks.Add(
                         _comPortService.ConnectSerialPort(stoppingToken));
+                }
+            }
+            else
+            {
+                //вызов метода получения конфигурации
+                var result = await _configuratorService.GetModbusTcpSettingAsync();
+                //проверка результата
+                if (result.Success == true)
+                {
+                    //перебираем ports с конфигурациями com портов 
+                    foreach (var settingConnect in result.Data)
+                    {
+                        Console.WriteLine("Записываем данные подключения");
+                        //создаем для каждого обьекта свой logger
+                        var readerLogger = _loggerFactory.CreateLogger<ModbusTcpService>();
+
+                        var _comPortService = new ModbusTcpService(
+                            readerLogger,
+                            _storage,
+                            settingConnect);
+                         
+                        //создание нового компонента в List
+                        tasks.Add(
+                            _comPortService.ConnectMosbucTcp(stoppingToken));
+                    }
+                }
+                else 
+                {
+                    _logger.LogWarning("Произошла ошибка получения конфигурации протокола, причина:" + result.Message);
                 }
             }
             
