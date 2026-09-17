@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using static PromVesServer.Models.SerialPortBoardSettingsModel;
 
 namespace PromVesServer.Service
 {
@@ -173,6 +175,73 @@ namespace PromVesServer.Service
                 Console.WriteLine($"Тип ошибки: {ex.GetType().FullName}");
                 Console.WriteLine($"StackTrace: {ex.StackTrace}");
                 return ServiceResult<List<ModbusTcpSettingModel>>.Fail(ex.Message);
+            }
+
+        }
+
+        public async Task<ServiceResult<List<SerialPortBoardSettingsModel>>> GetBoardSettingAsync()
+        {
+            try
+            {
+                // считываем файл
+                string json = await File.ReadAllTextAsync("ConfigPortBoard.json");
+
+                var options = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+
+                options.Converters.Add(new JsonStringEnumConverter());
+
+                SerialPortsBoards config =
+                    JsonSerializer.Deserialize<SerialPortsBoards>(json, options)
+                    ?? new SerialPortsBoards();
+
+                foreach (var setting in config.SerialPortBoardSetting)
+                {
+                    Console.WriteLine($"Name: {setting.PortName}");
+                }
+
+                return ServiceResult<List<SerialPortBoardSettingsModel>>
+                    .Ok(config.SerialPortBoardSetting);
+            }
+            catch (FileNotFoundException ex)
+            {
+                Console.WriteLine($"Файл не найден: {ex.Message}");
+                return ServiceResult<List<SerialPortBoardSettingsModel>>.Fail(ex.Message);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Console.WriteLine(
+                    $"Нет доступа к файлу конфигурации табла: {ex.Message}");
+                return ServiceResult<List<SerialPortBoardSettingsModel>>.Fail(ex.Message);
+            }
+            catch (DirectoryNotFoundException ex)
+            {
+                Console.WriteLine(
+                    $"Директория файла конфигурации табла не найдена: {ex.Message}");
+                return ServiceResult<List<SerialPortBoardSettingsModel>>.Fail(ex.Message);
+            }
+            catch (IOException ex)
+            {
+                Console.WriteLine(
+                    $"Ошибка ввода-вывода при работе с файлом табал конфигурации: {ex.Message}");
+                return ServiceResult<List<SerialPortBoardSettingsModel>>.Fail(ex.Message);
+            }
+            catch (InvalidDataException ex)
+            {
+                Console.WriteLine(
+                    $"Некорректные данные табла конфигурации: {ex.Message}");
+                return ServiceResult<List<SerialPortBoardSettingsModel>>.Fail(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(
+                    $"Непредвиденная ошибка при загрузке конфигурации: {ex.Message}");
+
+                Console.WriteLine($"Тип ошибки: {ex.GetType().FullName}");
+                Console.WriteLine($"StackTrace: {ex.StackTrace}");
+                return ServiceResult<List<SerialPortBoardSettingsModel>>.Fail(ex.Message);
             }
 
         }

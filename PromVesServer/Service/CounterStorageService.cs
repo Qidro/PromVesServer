@@ -48,5 +48,11 @@ namespace PromVesServer.Service
                     : "OFFLINE"));
             }
         }
+
+        public async Task<decimal> GetSumWeighing()
+        {
+            decimal totalWeight = Math.Round(_values.Values.Where(x => x.Online).Sum(x => (decimal)x.Weight) / 1000m, 2);
+            return totalWeight;
+        }
     }
 }

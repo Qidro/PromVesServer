@@ -34,20 +34,35 @@ namespace PromVesServer
             var tasks = new List<Task>();
             //получаем конфигурацию протоколов
             var resutConfig = _configuratorService.GetConfigProtocol();
+            //получаем конфигурацию табла
+            var resutConfigBoard = await _configuratorService.GetBoardSettingAsync();
             //проверяем на успешность
             if (resutConfig.Success == false)
             {
                 Console.WriteLine("Задаем стандартны настройки");
                 //задаем стандартные настройки
-                resutConfig.Data.ModbusRtu = false;
-                resutConfig.Data.ModbusTcp = false;
-                resutConfig.Data.St = true;
-                resutConfig.Data.YHLBoard = false;
-                resutConfig.Data.GreenBoard = false;
+                resutConfig.Data.Protocol = "St";
+                resutConfig.Data.Board = "YHLBoard";
             }
+            if (resutConfig.Data.Board == "YHLBoard")
+            {
+                foreach (var ConfigBoard in resutConfigBoard.Data)
+                {
+                    Console.WriteLine("Записываем com порт табла");
+                    //создаем для каждого обьекта свой logger
+                    var readerLogger = _loggerFactory.CreateLogger<BoardService>();
 
+                    var _boardService = new BoardService(ConfigBoard,
+                        readerLogger,
+                        _storage);
+
+                    //создание нового компонента в List
+                    tasks.Add(
+                        _boardService.PrintBoardAsync(stoppingToken));
+                }
+            }
             //проверяем заданные параметры
-            if (resutConfig.Data.ModbusRtu == true || resutConfig.Data.St == true)
+            if (resutConfig.Data.Protocol == "St" || resutConfig.Data.Protocol == "ModbusRtu")
             {
                 //перебираем ports с конфигурациями com портов 
                 foreach (var port in ports)
@@ -59,7 +74,7 @@ namespace PromVesServer
                     var _comPortService = new ComPortService(port,
                         readerLogger,
                         _storage,
-                        resutConfig.Data.ModbusRtu);
+                        resutConfig.Data.Protocol == "ModbusRtu");
 
                     //создание нового компонента в List
                     tasks.Add(

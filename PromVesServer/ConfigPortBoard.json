@@ -1,0 +1,13 @@
+{
+  "SerialPortsBoards": [
+    {
+      "Id": 1,
+      "PortName": "COM17",
+      "BaudRate": 1200,
+      "DataBits": 8,
+      "Parity": "None",
+      "StopBits": "One",
+      "Handshake": "None"
+    }
+  ]
+}
