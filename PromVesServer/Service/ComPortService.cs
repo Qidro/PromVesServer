@@ -46,8 +46,7 @@ namespace PromVesServer.Service
             _logger = logger;
             _storage = storage;
             _modbusRtu = modbusRtu;
-
-
+            _storage.UpdateValue(IdPort, 0);
         }
 
         //private const int PacketSize = 11;

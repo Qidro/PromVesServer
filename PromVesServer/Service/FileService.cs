@@ -11,9 +11,14 @@ namespace PromVesServer.Service
     {
         private readonly string _filePath = "weighing.txt";
         private readonly CounterStorageService _storage;
-        private double[] WeighingCards = new double[4];
+        private List<WeighingDeviceValue> weighingDeviceValue = new List<WeighingDeviceValue>();
+        private List<string> WeighingCards;
         private string WeighingResult;
+        private string Status;
+        private string StatusSum;
         private double SumWeighing;
+        private string StatusWeighing;
+        private decimal totalWeight;
         private readonly ILogger<FileService> _logger;
         public FileService(ILogger<FileService> logger, CounterStorageService storage)
         {
@@ -25,46 +30,129 @@ namespace PromVesServer.Service
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                //получаем данные взвешивания
-                WeighingResult = _storage.GetMessage();
-                //парсим их в массив, сохраняя данных в тоннах и оставляем 2 значения после запятой
-                WeighingCards = WeighingResult
-                .Split(';')
-                .Select(x => Math.Round(double.Parse(x) / 1000.0, 2))
-                .ToArray();
-
-                //if (!File.Exists(_filePath))
-                //{
-                //заполняем модель
-                    var weighing = new WeighingModel
+                try
+                {
+                    //чистка данных перед операцией записи
+                    weighingDeviceValue.Clear();
+                    totalWeight = 0;
+                    //получаем данные взвешивания
+                    WeighingResult = _storage.GetMessage();
+                    //парсим их в массив, сохраняя данных в кг.
+                    WeighingCards = WeighingResult.Split(';').ToList();
+                    //заполняем модель и проверяем их на соединение с весами
+                    for (int i = 0; WeighingCards.Count > i; i++)
                     {
-                        L1 = WeighingCards[0],
-                        R1 = WeighingCards[1],
-                        L2 = WeighingCards[2],
-                        R2 = WeighingCards[3],
-                        SumWeighing = WeighingCards.Sum(),
+                        //если записей нет или соединения нет, то записываем в статус ошибку
+                        if (WeighingCards[i] == "OFFLINE" || WeighingCards[i] == "")
+                        {
+                            // устройство не отвечает
+                            Status = "ERROR"; 
+                        }
+                        else
+                        {
+                            Status = "Ok";
+                        }
+                        var weighing = new WeighingDeviceValue
+                        {
+                            DeviceId = i,
+                            Weight = WeighingCards[i],
+                            Status = Status
+                        };
+                        weighingDeviceValue.Add(weighing);
+                    }
+                    // Если среди значений есть OFFLINE — ничего не складываем, статус будет ошибка
+                    if (!WeighingCards.Contains("OFFLINE") && WeighingCards?.Any(x => !string.IsNullOrWhiteSpace(x)) == true)
+                    {
+                        for (int i = 0; WeighingCards.Count > i; i++)
+                        {
+                            //парсим
+                            decimal weight = decimal.Parse(WeighingCards[i]);
+                            //складываем
+                            totalWeight += weight;
+                        }
+                        StatusWeighing = "Ok";
+                    }
+                    else
+                    {
+                        StatusWeighing = "ERROR";
+                    }
+                    //Записываем данные в модель
+                    var weighingReslut = new WeighingResult
+                    {
+                        Values = weighingDeviceValue,
+                        SumWeighing = totalWeight.ToString(),
+                        Status = StatusWeighing,
                         DT = DateTime.Now
                     };
                     //вызываем метод сохранения результатов
-                    await SaveAsync(weighing);
+                    await SaveAsync(weighingReslut);
                     //return;
-                //остановка на 30 секунд
-                await Task.Delay(30000, cancellationToken);
+                    //остановка на 30 секунд
+                    await Task.Delay(30000, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Нормальное завершение работы через CancellationToken
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    // Ошибка не должна остановить бесконечный цикл
+                    _logger.LogError($"Ошибка в цикле взвешивания: {ex.Message}");
+
+                    // Чтобы при постоянной ошибке цикл не крутился
+                    await Task.Delay(5000, cancellationToken);
+                }
             }
             
         }
         //метод по записи данных файл
-        public async Task SaveAsync(WeighingModel weighing)
+        public async Task SaveAsync(WeighingResult weighing)
         {
-            //параметр говорит сериализатору сделать JSON красиво отформатированным - с переносами строк и отступами
-            var options = new JsonSerializerOptions
+            try 
             {
-                WriteIndented = true
-            };
-            //сохраняем в данные формате Json
-            string json = JsonSerializer.Serialize(weighing, options);
-            //перезаписыавем файл, если его нет, то создаем и записываем данные
-            await File.WriteAllTextAsync(_filePath, json);
+                //параметр говорит сериализатору сделать JSON красиво отформатированным - с переносами строк и отступами
+                var options = new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                };
+                //сохраняем в данные формате Json
+                string json = JsonSerializer.Serialize(weighing, options);
+                //перезаписыавем файл, если его нет, то создаем и записываем данные
+                await File.WriteAllTextAsync(_filePath, json);
+            }
+            catch (JsonException ex)
+            {
+                // Возникает ошибка при сериализации объекта в JSON.
+                _logger.LogError($"Ошибка сериализации данных в JSON: {ex.Message}");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                // Нет прав на создание или изменение файла.
+                _logger.LogError($"Нет доступа к файлу: {ex.Message}");
+            }
+            catch (DirectoryNotFoundException ex)
+            {
+                // Директория, в которой должен находиться файл, не существует.
+                _logger.LogError($"Директория не найдена: {ex.Message}");
+            }
+            catch (PathTooLongException ex)
+            {
+                // Слишком длинный путь к файлу или директории.
+                _logger.LogError($"Слишком длинный путь к файлу: {ex.Message}");
+            }
+            catch (IOException ex)
+            {
+                // Другие ошибки, связанные с вводом/выводом:
+                // файл занят другим процессом, проблемы с диском и т.д.
+                _logger.LogError($"Ошибка при работе с файлом: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                // Любая другая непредвиденная ошибка.
+                _logger.LogError($"Произошла непредвиденная ошибка: {ex.Message}");
+            }
+            
         }
 
         //public async Task UpdateAsync(string firstName, string lastName)

@@ -5,20 +5,24 @@ using System.Text;
 namespace PromVesServer.Models
 {
     //модель файла взвешивания для 1С
-    public class WeighingModel
+    public class WeighingResult
     {
-        //первая платформа левая сторона
-        public double L1 { get; set; }
-        //первая платформа правая сторона
-        public double R1 { get; set; }
-        //вторая платформа левая сторона
-        public double L2 { get; set; }
-        //вторая платформа правая сторона
-
-        public double R2 { get; set; }
+        //значения
+        public List<WeighingDeviceValue> Values { get; set; } = new();
         //общий вес
-        public double SumWeighing { get; set; }
+        public string SumWeighing { get; set; }
+        //статус 
+        public string Status { get; set; }
         //время взвешивания
         public DateTime DT { get; set; }
+    }
+    public class WeighingDeviceValue
+    {
+        //номер устройства
+        public int DeviceId { get; set; }
+        //вес
+        public string Weight { get; set; }
+        // Статус устройства
+        public string Status { get; set; }
     }
 }

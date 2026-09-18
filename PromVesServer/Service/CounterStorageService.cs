@@ -49,10 +49,13 @@ namespace PromVesServer.Service
             }
         }
 
-        public async Task<decimal> GetSumWeighing()
+        public decimal GetSumWeighing()
         {
-            decimal totalWeight = Math.Round(_values.Values.Where(x => x.Online).Sum(x => (decimal)x.Weight) / 1000m, 2);
-            return totalWeight;
+            lock (_lock)
+            {
+                decimal totalWeight = Math.Round(_values.Values.Where(x => x.Online).Sum(x => (decimal)x.Weight) / 1000m, 2);
+                return totalWeight;
+            }
         }
     }
 }

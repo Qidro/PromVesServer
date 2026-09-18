@@ -13,16 +13,18 @@ namespace PromVesServer
         private readonly CounterStorageService _storage;
         //
         private readonly ConfiguratorService _configuratorService;
+        private readonly IHostApplicationLifetime _hostApplicationLifetime;
         //конфигурацич modbus
         //private readonly ModbusTcpService _modbusTcpService;
         public ScaleServer(IConfiguration configuration, ILogger<ScaleServer> logger, ILoggerFactory loggerFactory, 
-            CounterStorageService storage, ConfiguratorService configuratorService)
+            CounterStorageService storage, ConfiguratorService configuratorService, IHostApplicationLifetime hostApplicationLifetime)
         {
             _configuration = configuration;
             _logger = logger;
             _loggerFactory = loggerFactory;
             _storage = storage;
             _configuratorService = configuratorService;
+            _hostApplicationLifetime = hostApplicationLifetime;
         }
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
@@ -39,26 +41,34 @@ namespace PromVesServer
             //проверяем на успешность
             if (resutConfig.Success == false)
             {
-                Console.WriteLine("Задаем стандартны настройки");
-                //задаем стандартные настройки
-                resutConfig.Data.Protocol = "St";
-                resutConfig.Data.Board = "YHLBoard";
+                _logger.LogError($"Произошла ошибка получения master-конфигурации, причина: {resutConfig.Message}");
+                _hostApplicationLifetime.StopApplication();
+                return;
+                //resutConfig.Data.Protocol = "St";
+                //resutConfig.Data.Board = "YHLBoard";
             }
             if (resutConfig.Data.Board == "YHLBoard")
             {
-                foreach (var ConfigBoard in resutConfigBoard.Data)
+                if (resutConfigBoard.Success == true)
                 {
-                    Console.WriteLine("Записываем com порт табла");
-                    //создаем для каждого обьекта свой logger
-                    var readerLogger = _loggerFactory.CreateLogger<BoardService>();
+                    foreach (var ConfigBoard in resutConfigBoard.Data)
+                    {
+                        Console.WriteLine("Записываем com порт табла");
+                        //создаем для каждого обьекта свой logger
+                        var readerLogger = _loggerFactory.CreateLogger<BoardService>();
 
-                    var _boardService = new BoardService(ConfigBoard,
-                        readerLogger,
-                        _storage);
+                        var _boardService = new BoardService(ConfigBoard,
+                            readerLogger,
+                            _storage);
 
-                    //создание нового компонента в List
-                    tasks.Add(
-                        _boardService.PrintBoardAsync(stoppingToken));
+                        //создание нового компонента в List
+                        tasks.Add(
+                            _boardService.PrintBoardAsync(stoppingToken));
+                    }
+                }
+                else 
+                {
+                    _logger.LogError($"Произошла ошибка получения конфигурации для табла, причина: {resutConfigBoard.Message}");
                 }
             }
             //проверяем заданные параметры
