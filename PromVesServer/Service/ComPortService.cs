@@ -185,6 +185,11 @@ namespace PromVesServer.Service
                 {
                     if (_serialPort.IsOpen)
                         _serialPort.Close();
+                    // Ждём 1 секунду перед новой попыткой подключения
+                    if (!cancellationToken.IsCancellationRequested)
+                    {
+                        await Task.Delay(1000, cancellationToken);
+                    }
                 }
             }
         }

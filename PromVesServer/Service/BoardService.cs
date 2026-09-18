@@ -95,7 +95,7 @@ namespace PromVesServer.Service
                             Console.WriteLine($"Вес {SumWeighing:F2} передан.");
 
                             // Пауза 100 мс
-                            await Task.Delay(100, cancellationToken);
+                            await Task.Delay(500, cancellationToken);
                         }
                         else
                         {
@@ -113,23 +113,28 @@ namespace PromVesServer.Service
                 {
                    // Console.WriteLine("{NamePort} уже используется:", NamePort);
                     _logger.LogInformation("порт используется");
-                    await Task.Delay(1000, cancellationToken);
+                    //await Task.Delay(1000, cancellationToken);
                 }
                 catch (IOException)
                 {
                    // Console.WriteLine("Порт не найден: " + NamePort);
                     _logger.LogInformation("порт не найден");
-                    await Task.Delay(1000, cancellationToken);
+                   // await Task.Delay(1000, cancellationToken);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Ошибка COM-порта: " + NamePort);
-                    await Task.Delay(100, cancellationToken);
+                    //await Task.Delay(100, cancellationToken);
                 }
                 finally
                 {
                     if (_serialPort.IsOpen)
                         _serialPort.Close();
+                    //задержка на 1 секунду
+                    if (!cancellationToken.IsCancellationRequested)
+                    {
+                        await Task.Delay(1000, cancellationToken);
+                    }
                 }
             }
         }
@@ -173,6 +178,7 @@ namespace PromVesServer.Service
             byte[] bytes = Encoding.ASCII.GetBytes(data);
 
             await port.BaseStream.WriteAsync(bytes);
+            //port.Write(bytes, 0, bytes.Length);
         }
     }
 }

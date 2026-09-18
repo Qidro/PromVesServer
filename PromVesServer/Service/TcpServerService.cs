@@ -65,7 +65,7 @@ namespace PromVesServer.Service
 
 
                     //var DateTime.UtcNow - LastUpdate
-                    byte[] buffer = Encoding.UTF8.GetBytes(_storage.GetMessage());
+                    byte[] buffer = Encoding.UTF8.GetBytes(_storage.GetMessage() + "\n");
 
                     await stream.WriteAsync(buffer, cancellationToken);
 
