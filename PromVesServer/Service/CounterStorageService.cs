@@ -10,6 +10,18 @@ namespace PromVesServer.Service
         private readonly object _lock = new();
         //в колекции будут храниться значения c COM портов
         private readonly Dictionary<int, ScaleState> _values = new();
+        //инициализация портов
+        public void InitPort(int portId)
+        {
+            lock (_lock)
+            {
+                _values[portId] = new ScaleState
+                {
+                    Weight = 0,
+                    HasResponse = false
+                };
+            }
+        }
         //обновление значения по Id
         public void UpdateValue(int portId, int value)
         {
@@ -23,6 +35,7 @@ namespace PromVesServer.Service
 
                 _values[portId].Weight = value;
                 _values[portId].LastUpdate = DateTime.Now;
+                _values[portId].HasResponse = true;
                 //_values[portId].Online = true;
             }
         }
@@ -49,13 +62,13 @@ namespace PromVesServer.Service
             }
         }
 
-        public decimal GetSumWeighing()
-        {
-            lock (_lock)
-            {
-                decimal totalWeight = Math.Round(_values.Values.Where(x => x.Online).Sum(x => (decimal)x.Weight) / 1000m, 2);
-                return totalWeight;
-            }
-        }
+        //public decimal GetSumWeighing()
+        //{
+        //    lock (_lock)
+        //    {
+        //        decimal totalWeight = Math.Round(_values.Values.Where(x => x.Online).Sum(x => (decimal)x.Weight) / 1000m, 2);
+        //        return totalWeight;
+        //    }
+        //}
     }
 }

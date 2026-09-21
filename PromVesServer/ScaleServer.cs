@@ -66,7 +66,32 @@ namespace PromVesServer
                             _boardService.PrintBoardAsync(stoppingToken));
                     }
                 }
-                else 
+                else
+                {
+                    _logger.LogError($"Произошла ошибка получения конфигурации для табла, причина: {resutConfigBoard.Message}");
+                }
+            }
+            else if (resutConfig.Data.Board == "YHLBoard")
+            {
+                //проверка на успешность получения конфигурации табла
+                if (resutConfigBoard.Success == true)
+                {
+                    foreach (var ConfigBoard in resutConfigBoard.Data)
+                    {
+                        _logger.LogDebug("Записываем com порт табла");
+                        //создаем для каждого обьекта свой logger
+                        var readerLogger = _loggerFactory.CreateLogger<BoardService>();
+
+                        var _boardService = new BoardService(ConfigBoard,
+                            readerLogger,
+                            _storage);
+
+                        //создание нового компонента в List
+                        tasks.Add(
+                            _boardService.PrintGreenBoardAsync(stoppingToken));
+                    }
+                }
+                else
                 {
                     _logger.LogError($"Произошла ошибка получения конфигурации для табла, причина: {resutConfigBoard.Message}");
                 }

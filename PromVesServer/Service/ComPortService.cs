@@ -31,8 +31,6 @@ namespace PromVesServer.Service
             NamePort = settings.PortName;
             //Id Slave
             IdSlave = settings.slaveAddress;
-            _logger.LogDebug(
-        $"Создан ComPortService: Id={IdPort}, Port={NamePort}");
             //настройка порта
             _serialPort = new SerialPort
             {
@@ -46,7 +44,9 @@ namespace PromVesServer.Service
             _logger = logger;
             _storage = storage;
             _modbusRtu = modbusRtu;
-            _storage.UpdateValue(IdPort, 0);
+            _storage.InitPort(IdPort);
+            _logger.LogDebug(
+        $"Создан ComPortService: Id={IdPort}, Port={NamePort}");
         }
 
         //private const int PacketSize = 11;

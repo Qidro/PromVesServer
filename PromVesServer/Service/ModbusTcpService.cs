@@ -30,6 +30,8 @@ namespace PromVesServer.Service
             IdSlave = modbusTcpSettingModel.SlaveId;
             NportIp = modbusTcpSettingModel.NportIp;
             NportPort = modbusTcpSettingModel.NportPort;
+            //регистрация
+            _storage.InitPort(IdPort);
         }
         
         public async Task ConnectMosbucTcp(CancellationToken cancellationToken)

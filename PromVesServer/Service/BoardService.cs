@@ -3,6 +3,7 @@ using NModbus.Serial;
 using PromVesServer.Models;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO.Ports;
 using System.Net.NetworkInformation;
 using System.Text;
@@ -28,8 +29,6 @@ namespace PromVesServer.Service
             IdPort = settings.Id;
             //Название порта
             NamePort = settings.PortName;
-            _logger.LogDebug(
-        $"Создан ComPortService: Id={IdPort}, Port={NamePort}");
             //настройка порта
             _serialPort = new SerialPort
             {
@@ -42,15 +41,16 @@ namespace PromVesServer.Service
             };
             _logger = logger;
             _storage = storage;
-
+            _logger.LogDebug(
+        $"Создан ComPortService: Id={IdPort}, Port={NamePort}");
 
         }
         //метод, отвечает за отправку данных веса на табло
         public async Task PrintBoardAsync(CancellationToken cancellationToken)
         {
-            var adapter = new SerialPortAdapter(_serialPort);
-            var factory = new ModbusFactory();
-            var master = factory.CreateRtuMaster(adapter);
+            //var adapter = new SerialPortAdapter(_serialPort);
+            //var factory = new ModbusFactory();
+            //var master = factory.CreateRtuMaster(adapter);
             //бесконечный цикл, если будет ошибка возникает - переподключаемся к com порту
             while (!cancellationToken.IsCancellationRequested)
             {
@@ -86,6 +86,7 @@ namespace PromVesServer.Service
                                 else
                                 {
                                     _logger.LogWarning("Не удалось преобразовать значение веса: {Value}", WeighingCards[i]);
+                                    break;
                                 }
                             }
                             SumWeighing = SumWeighing/1000m;
@@ -138,8 +139,102 @@ namespace PromVesServer.Service
                 }
             }
         }
+
+        //метод, отвечает за отправку данных веса на зеленное табло
+        public async Task PrintGreenBoardAsync(CancellationToken cancellationToken)
+        {
+            //var adapter = new SerialPortAdapter(_serialPort);
+            //var factory = new ModbusFactory();
+            //var master = factory.CreateRtuMaster(adapter);
+            //бесконечный цикл, если будет ошибка возникает - переподключаемся к com порту
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    //_serialPort.Encoding = Encoding.ASCII;
+                    //открываем com порт
+                    _serialPort.Open();
+                    _logger.LogInformation("Подключили {Port}", NamePort);
+                    //сумма веса
+                    decimal SumWeighing;
+                    //перменная для получения значений веса/ошибок
+                    string dataWeighing;
+                    List<string> WeighingCards = new List<string>();
+                    while (!cancellationToken.IsCancellationRequested)
+                    {
+                        //изначалная сумма операции
+                        SumWeighing = 0;
+                        //получаем значения с весов
+                        dataWeighing = _storage.GetMessage();
+                        WeighingCards = dataWeighing.Split(';').ToList();
+                        //если записей нет или соединения нет, то записываем в статус ошибку
+                        if (!dataWeighing.Contains("OFFLINE") && !string.IsNullOrWhiteSpace(dataWeighing))
+                        {
+                            for (int i = 0; WeighingCards.Count > i; i++)
+                            {
+                                //парсим
+                                if (decimal.TryParse(WeighingCards[i], out var weight))
+                                {
+                                    //складываем
+                                    SumWeighing += weight;
+                                }
+                                else
+                                {
+                                    _logger.LogWarning("Не удалось преобразовать значение веса: {Value}", WeighingCards[i]);
+                                    break;
+                                }
+                            }
+                            SumWeighing = SumWeighing / 1000m;
+                            _logger.LogDebug("значение: " + SumWeighing);
+                            _serialPort.Write('\u0002' + "     " + SumWeighing.ToString("F2", CultureInfo.InvariantCulture).Replace(',', '.') + '\u000D' + '\u000A');
+                           _logger.LogDebug($"Вес {SumWeighing:F2} передан.");
+
+                            // Пауза 100 мс
+                            await Task.Delay(500, cancellationToken);
+                        }
+                        else
+                        {
+                            // Пауза 100 мс
+                            await Task.Delay(100, cancellationToken);
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.LogInformation("{NamePort} остановлен", NamePort);
+                    //await Task.Delay(100, cancellationToken);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Console.WriteLine("{NamePort} уже используется:", NamePort);
+                    _logger.LogInformation("порт используется");
+                    //await Task.Delay(1000, cancellationToken);
+                }
+                catch (IOException)
+                {
+                    // Console.WriteLine("Порт не найден: " + NamePort);
+                    _logger.LogInformation("порт не найден");
+                    // await Task.Delay(1000, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Ошибка COM-порта: " + NamePort);
+                    //await Task.Delay(100, cancellationToken);
+                }
+                finally
+                {
+                    if (_serialPort.IsOpen)
+                        _serialPort.Close();
+                    //задержка на 1 секунду
+                    if (!cancellationToken.IsCancellationRequested)
+                    {
+                        await Task.Delay(1000, cancellationToken);
+                    }
+                }
+            }
+        }
         //метод отвечает за преобразование данных и отправку их через com порт
-        static async Task SendWeight(SerialPort port, decimal weight)
+        private async Task SendWeight(SerialPort port, decimal weight)
         {
             bool neg = weight < 0;
 
