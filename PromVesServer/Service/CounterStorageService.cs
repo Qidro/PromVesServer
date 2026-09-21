@@ -22,7 +22,7 @@ namespace PromVesServer.Service
                 }
 
                 _values[portId].Weight = value;
-                _values[portId].LastUpdate = DateTime.UtcNow;
+                _values[portId].LastUpdate = DateTime.Now;
                 //_values[portId].Online = true;
             }
         }

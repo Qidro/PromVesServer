@@ -28,7 +28,7 @@ namespace PromVesServer.Service
             IdPort = settings.Id;
             //Название порта
             NamePort = settings.PortName;
-            Console.WriteLine(
+            _logger.LogDebug(
         $"Создан ComPortService: Id={IdPort}, Port={NamePort}");
             //настройка порта
             _serialPort = new SerialPort
@@ -92,7 +92,7 @@ namespace PromVesServer.Service
                             //метод отправки сообщений
                             await SendWeight(_serialPort, SumWeighing);
 
-                            Console.WriteLine($"Вес {SumWeighing:F2} передан.");
+                            _logger.LogDebug($"Вес {SumWeighing:F2} передан.");
 
                             // Пауза 100 мс
                             await Task.Delay(500, cancellationToken);
@@ -173,7 +173,7 @@ namespace PromVesServer.Service
 
             string result = new string(data);
 
-            Console.WriteLine($"Отправляем: [{result}]");
+            _logger.LogDebug($"Отправляем: [{result}]");
 
             byte[] bytes = Encoding.ASCII.GetBytes(data);
 

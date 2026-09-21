@@ -2,26 +2,11 @@
   "Values": [
     {
       "DeviceId": 0,
-      "Weight": "0",
-      "Status": "Ok"
-    },
-    {
-      "DeviceId": 1,
-      "Weight": "0",
-      "Status": "Ok"
-    },
-    {
-      "DeviceId": 2,
-      "Weight": "-220",
-      "Status": "Ok"
-    },
-    {
-      "DeviceId": 3,
-      "Weight": "0",
-      "Status": "Ok"
+      "Weight": "",
+      "Status": "ERROR"
     }
   ],
-  "SumWeighing": "-220",
-  "Status": "Ok",
-  "DT": "2026-09-18T17:55:18.1852278+05:00"
+  "SumWeighing": "0",
+  "Status": "ERROR",
+  "DT": "2026-09-21T11:40:11.1467649+05:00"
 }

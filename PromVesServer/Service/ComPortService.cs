@@ -31,7 +31,7 @@ namespace PromVesServer.Service
             NamePort = settings.PortName;
             //Id Slave
             IdSlave = settings.slaveAddress;
-            Console.WriteLine(
+            _logger.LogDebug(
         $"Создан ComPortService: Id={IdPort}, Port={NamePort}");
             //настройка порта
             _serialPort = new SerialPort
@@ -69,14 +69,14 @@ namespace PromVesServer.Service
                     {
                         while (!cancellationToken.IsCancellationRequested)
                         {
-                            Console.WriteLine($"Читаем: slave: "+IdSlave);
+                            _logger.LogDebug($"Читаем: slave: "+IdSlave);
                             // Читаем Input Registers (функция 04)
                             ushort[] registers = await master.ReadInputRegistersAsync(
                         slaveAddress: (byte)IdSlave,
                         startAddress: 9,
                         numberOfPoints: 2);
 
-                            Console.WriteLine($"[{NamePort}] Id={IdSlave}: Registers {registers[0]}, {registers[1]}");
+                            _logger.LogDebug($"[{NamePort}] Id={IdSlave}: Registers {registers[0]}, {registers[1]}");
 
                             // Собираем 32-битное значение (High + Low)
                             uint raw =
@@ -85,9 +85,9 @@ namespace PromVesServer.Service
 
                             int value = unchecked((int)raw);
 
-                            Console.WriteLine($"Raw {IdSlave} value: {value}");
+                            _logger.LogDebug($"Raw {IdSlave} value: {value}");
                             _storage.UpdateValue(IdPort, value);
-                            await Task.Delay(1000);
+                            await Task.Delay(1000, cancellationToken);
                         }
                     }
                     else
@@ -165,17 +165,17 @@ namespace PromVesServer.Service
                 }
                 catch (OperationCanceledException)
                 {
-                    _logger.LogInformation("{NamePort} остановлен", NamePort);
+                    _logger.LogInformation($"Порт {NamePort} остановлен");
                 }
                 catch (UnauthorizedAccessException)
                 {
-                    Console.WriteLine("{NamePort} уже используется:", NamePort);
-                    _logger.LogInformation("порт используется");
+                    //Console.WriteLine("{NamePort} уже используется:", NamePort);
+                    _logger.LogInformation($"{NamePort} используется");
                 }
                 catch (IOException)
                 {
-                    Console.WriteLine("Порт не найден: "+ NamePort);
-                    _logger.LogInformation("порт не найден");
+                  //  Console.WriteLine("Порт не найден: "+ NamePort);
+                    _logger.LogInformation($"Порт {NamePort} не найден");
                 }
                 catch (Exception ex)
                 {
@@ -188,7 +188,7 @@ namespace PromVesServer.Service
                     // Ждём 1 секунду перед новой попыткой подключения
                     if (!cancellationToken.IsCancellationRequested)
                     {
-                        await Task.Delay(1000, cancellationToken);
+                        await Task.Delay(3000, cancellationToken);
                     }
                 }
             }

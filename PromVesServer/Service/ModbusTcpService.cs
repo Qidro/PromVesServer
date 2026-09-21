@@ -44,17 +44,19 @@ namespace PromVesServer.Service
             {
                 TcpClient? client = null;
                 IModbusSerialMaster? master = null;
-                Console.WriteLine(
-                "Подключение к Moxa NPort...");
+                _logger.LogInformation(
+                $"Подключение {startAddress} к Moxa NPort...");
                 try
                 {
                     client = new TcpClient();
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                     await client.ConnectAsync(
                     NportIp,
-                    NportPort);
+                    NportPort,
+                    cts.Token);
 
-                    Console.WriteLine(
-                    "Подключение установлено.");
+                    _logger.LogInformation(
+                    $"Подключение {startAddress} установлено.");
                     var factory = new ModbusFactory();
                     var streamResource = new TcpClientAdapter(client);
 
@@ -71,7 +73,7 @@ namespace PromVesServer.Service
 
                     // Не повторяем запрос автоматически
                     master.Transport.Retries = 0;
-                    Console.WriteLine("Читаем регистры SWIFT...");
+                    _logger.LogDebug("Читаем регистры SWIFT...");
                     while (!cancellationToken.IsCancellationRequested)
                     {
                         ushort[] registers = await 
@@ -100,10 +102,10 @@ namespace PromVesServer.Service
                         int value =
                             unchecked((int)raw);
 
-                        Console.WriteLine(
+                        _logger.LogDebug(
                             $"INT value  IdSlave: {IdSlave}    : {value}");
                         _storage.UpdateValue(IdPort, value);
-                        await Task.Delay(200);
+                        await Task.Delay(200, cancellationToken);
                     }
                 }
                 catch (SocketException ex) 

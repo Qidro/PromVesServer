@@ -2,7 +2,7 @@
   "SerialPortsBoards": [
     {
       "Id": 1,
-      "PortName": "COM17",
+      "PortName": "COM2",
       "BaudRate": 1200,
       "DataBits": 8,
       "Parity": "None",

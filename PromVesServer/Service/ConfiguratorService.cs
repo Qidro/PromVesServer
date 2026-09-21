@@ -80,40 +80,40 @@ namespace PromVesServer.Service
             }
             catch (FileNotFoundException ex)
             {
-                Console.WriteLine($"Файл не найден: {ex.Message}");
+                _logger.LogError($"Файл не найден: {ex.Message}");
                 return ServiceResult<GeneralConfiguratorModel>.Fail(ex.Message);
             }
             catch (UnauthorizedAccessException ex)
             {
-                Console.WriteLine(
+                _logger.LogError(
                     $"Нет доступа к файлу конфигурации: {ex.Message}");
                 return ServiceResult<GeneralConfiguratorModel>.Fail(ex.Message);
             }
             catch (DirectoryNotFoundException ex)
             {
-                Console.WriteLine(
+                _logger.LogError(
                     $"Директория не найдена: {ex.Message}");
                 return ServiceResult<GeneralConfiguratorModel>.Fail(ex.Message);
             }
             catch (IOException ex)
             {
-                Console.WriteLine(
+                _logger.LogError(
                     $"Ошибка ввода-вывода при работе с файлом: {ex.Message}");
                 return ServiceResult<GeneralConfiguratorModel>.Fail(ex.Message);
             }
             catch (InvalidDataException ex)
             {
-                Console.WriteLine(
+                _logger.LogError(
                     $"Некорректные данные конфигурации: {ex.Message}");
                 return ServiceResult<GeneralConfiguratorModel>.Fail(ex.Message);
             }
             catch (Exception ex)
             {
-                Console.WriteLine(
+                _logger.LogError(
                     $"Непредвиденная ошибка при загрузке конфигурации: {ex.Message}");
 
-                Console.WriteLine($"Тип ошибки: {ex.GetType().FullName}");
-                Console.WriteLine($"StackTrace: {ex.StackTrace}");
+                //Console.WriteLine($"Тип ошибки: {ex.GetType().FullName}");
+                //Console.WriteLine($"StackTrace: {ex.StackTrace}");
                 return ServiceResult<GeneralConfiguratorModel>.Fail(ex.Message);
             }
         }
@@ -131,49 +131,49 @@ namespace PromVesServer.Service
                     ?? new ModbusTcpSettingRoot();
                 foreach (var setting in config.ModbusTcpSetting)
                 {
-                    Console.WriteLine($"Id: {setting.Id}");
-                    Console.WriteLine($"IP: {setting.NportIp}");
-                    Console.WriteLine($"Port: {setting.NportPort}");
-                    Console.WriteLine($"SlaveId: {setting.SlaveId}");
+                    _logger.LogDebug($"Id: {setting.Id}");
+                    _logger.LogDebug($"IP: {setting.NportIp}");
+                    _logger.LogDebug($"Port: {setting.NportPort}");
+                    _logger.LogDebug($"SlaveId: {setting.SlaveId}");
                 }
                 return ServiceResult<List<ModbusTcpSettingModel>>.Ok(config.ModbusTcpSetting);
             }
             catch (FileNotFoundException ex)
             {
-                Console.WriteLine($"Файл не найден: {ex.Message}");
+                _logger.LogError($"Файл не найден: {ex.Message}");
                 return ServiceResult<List<ModbusTcpSettingModel>>.Fail(ex.Message);
             }
             catch (UnauthorizedAccessException ex)
             {
-                Console.WriteLine(
+                _logger.LogError(
                     $"Нет доступа к файлу конфигурации: {ex.Message}");
                 return ServiceResult<List<ModbusTcpSettingModel>>.Fail(ex.Message);
             }
             catch (DirectoryNotFoundException ex)
             {
-                Console.WriteLine(
+                _logger.LogError(
                     $"Директория не найдена: {ex.Message}");
                 return ServiceResult<List<ModbusTcpSettingModel>>.Fail(ex.Message);
             }
             catch (IOException ex)
             {
-                Console.WriteLine(
+                _logger.LogError(
                     $"Ошибка ввода-вывода при работе с файлом: {ex.Message}");
                 return ServiceResult<List<ModbusTcpSettingModel>>.Fail(ex.Message);
             }
             catch (InvalidDataException ex)
             {
-                Console.WriteLine(
+                _logger.LogError(
                     $"Некорректные данные конфигурации: {ex.Message}");
                 return ServiceResult<List<ModbusTcpSettingModel>>.Fail(ex.Message);
             }
             catch (Exception ex)
             {
-                Console.WriteLine(
+                _logger.LogError(
                     $"Непредвиденная ошибка при загрузке конфигурации: {ex.Message}");
 
-                Console.WriteLine($"Тип ошибки: {ex.GetType().FullName}");
-                Console.WriteLine($"StackTrace: {ex.StackTrace}");
+                _logger.LogError($"Тип ошибки: {ex.GetType().FullName}");
+                _logger.LogError($"StackTrace: {ex.StackTrace}");
                 return ServiceResult<List<ModbusTcpSettingModel>>.Fail(ex.Message);
             }
 
@@ -199,7 +199,7 @@ namespace PromVesServer.Service
 
                 foreach (var setting in config.SerialPortBoardSetting)
                 {
-                    Console.WriteLine($"Name: {setting.PortName}");
+                    _logger.LogDebug($"Name: {setting.PortName}");
                 }
 
                 return ServiceResult<List<SerialPortBoardSettingsModel>>
@@ -207,40 +207,40 @@ namespace PromVesServer.Service
             }
             catch (FileNotFoundException ex)
             {
-                Console.WriteLine($"Файл не найден: {ex.Message}");
+                _logger.LogError($"Файл не найден: {ex.Message}");
                 return ServiceResult<List<SerialPortBoardSettingsModel>>.Fail(ex.Message);
             }
             catch (UnauthorizedAccessException ex)
             {
-                Console.WriteLine(
+                _logger.LogError(
                     $"Нет доступа к файлу конфигурации табла: {ex.Message}");
                 return ServiceResult<List<SerialPortBoardSettingsModel>>.Fail(ex.Message);
             }
             catch (DirectoryNotFoundException ex)
             {
-                Console.WriteLine(
+                _logger.LogError(
                     $"Директория файла конфигурации табла не найдена: {ex.Message}");
                 return ServiceResult<List<SerialPortBoardSettingsModel>>.Fail(ex.Message);
             }
             catch (IOException ex)
             {
-                Console.WriteLine(
+                _logger.LogError(
                     $"Ошибка ввода-вывода при работе с файлом табал конфигурации: {ex.Message}");
                 return ServiceResult<List<SerialPortBoardSettingsModel>>.Fail(ex.Message);
             }
             catch (InvalidDataException ex)
             {
-                Console.WriteLine(
+                _logger.LogError(
                     $"Некорректные данные табла конфигурации: {ex.Message}");
                 return ServiceResult<List<SerialPortBoardSettingsModel>>.Fail(ex.Message);
             }
             catch (Exception ex)
             {
-                Console.WriteLine(
+                _logger.LogError(
                     $"Непредвиденная ошибка при загрузке конфигурации: {ex.Message}");
 
-                Console.WriteLine($"Тип ошибки: {ex.GetType().FullName}");
-                Console.WriteLine($"StackTrace: {ex.StackTrace}");
+                //Console.WriteLine($"Тип ошибки: {ex.GetType().FullName}");
+                //Console.WriteLine($"StackTrace: {ex.StackTrace}");
                 return ServiceResult<List<SerialPortBoardSettingsModel>>.Fail(ex.Message);
             }
 

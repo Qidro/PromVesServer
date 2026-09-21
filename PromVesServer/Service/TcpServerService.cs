@@ -17,7 +17,7 @@ namespace PromVesServer.Service
             _logger = logger;
             _storage = storage;
         }
-
+        //запуск сервера
         public async Task StartAsync(CancellationToken cancellationToken)
         {
             // Получаем локальный IP
@@ -49,6 +49,7 @@ namespace PromVesServer.Service
 
             _logger.LogInformation("TCP сервер остановлен");
         }
+        //отправка данных веса на клиент
         private async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
         {
             try
@@ -57,21 +58,14 @@ namespace PromVesServer.Service
                 NetworkStream stream = client.GetStream();
                 while (!cancellationToken.IsCancellationRequested)
                 {
-
-
-                    //_logger.LogInformation("Подключился клиент {ip}:{port}",
-                    //    remote?.Address,
-                    //    remote?.Port);
-
-
-                    //var DateTime.UtcNow - LastUpdate
+                    //формировани строки для клиента
                     byte[] buffer = Encoding.UTF8.GetBytes(_storage.GetMessage() + "\n");
 
                     await stream.WriteAsync(buffer, cancellationToken);
 
                     //_logger.LogInformation("Сообщение отправлено");
 
-                    await Task.Delay(100, cancellationToken);
+                    await Task.Delay(200, cancellationToken);
                 }
                 
             }

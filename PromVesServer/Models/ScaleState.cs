@@ -12,6 +12,6 @@ namespace PromVesServer.Models
         public DateTime LastUpdate { get; set; }
         //есть ли сигнал с веса (5 секунд)
         public bool Online =>
-        DateTime.UtcNow - LastUpdate <= TimeSpan.FromSeconds(5);
+        DateTime.Now - LastUpdate <= TimeSpan.FromSeconds(5);
     }
 }

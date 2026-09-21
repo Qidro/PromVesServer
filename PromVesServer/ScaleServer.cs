@@ -53,7 +53,7 @@ namespace PromVesServer
                 {
                     foreach (var ConfigBoard in resutConfigBoard.Data)
                     {
-                        Console.WriteLine("Записываем com порт табла");
+                        _logger.LogDebug("Записываем com порт табла");
                         //создаем для каждого обьекта свой logger
                         var readerLogger = _loggerFactory.CreateLogger<BoardService>();
 
@@ -77,7 +77,7 @@ namespace PromVesServer
                 //перебираем ports с конфигурациями com портов 
                 foreach (var port in ports)
                 {
-                    Console.WriteLine("Записываем com порт");
+                    _logger.LogDebug("Записываем com порт");
                     //создаем для каждого обьекта свой logger
                     var readerLogger = _loggerFactory.CreateLogger<ComPortService>();
 
@@ -101,7 +101,7 @@ namespace PromVesServer
                     //перебираем ports с конфигурациями com портов 
                     foreach (var settingConnect in result.Data)
                     {
-                        Console.WriteLine("Записываем данные подключения");
+                        _logger.LogDebug("Записываем данные подключения");
                         //создаем для каждого обьекта свой logger
                         var readerLogger = _loggerFactory.CreateLogger<ModbusTcpService>();
 
