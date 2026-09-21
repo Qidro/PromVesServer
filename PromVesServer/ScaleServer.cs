@@ -71,7 +71,7 @@ namespace PromVesServer
                     _logger.LogError($"Произошла ошибка получения конфигурации для табла, причина: {resutConfigBoard.Message}");
                 }
             }
-            else if (resutConfig.Data.Board == "YHLBoard")
+            else if (resutConfig.Data.Board == "GreenBoard")
             {
                 //проверка на успешность получения конфигурации табла
                 if (resutConfigBoard.Success == true)

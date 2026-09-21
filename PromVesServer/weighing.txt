@@ -2,11 +2,26 @@
   "Values": [
     {
       "DeviceId": 0,
-      "Weight": "",
+      "Weight": "OFFLINE",
+      "Status": "ERROR"
+    },
+    {
+      "DeviceId": 1,
+      "Weight": "OFFLINE",
+      "Status": "ERROR"
+    },
+    {
+      "DeviceId": 2,
+      "Weight": "OFFLINE",
+      "Status": "ERROR"
+    },
+    {
+      "DeviceId": 3,
+      "Weight": "OFFLINE",
       "Status": "ERROR"
     }
   ],
   "SumWeighing": "0",
   "Status": "ERROR",
-  "DT": "2026-09-21T15:46:00.5745888+05:00"
+  "DT": "2026-09-21T17:55:29.4401936+05:00"
 }
