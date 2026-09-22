@@ -18,7 +18,7 @@ namespace PromVesServer.Service
                 _values[portId] = new ScaleState
                 {
                     Weight = 0,
-                    HasResponse = false
+                    HasResponse = false //изначально состояние подключения отсутвуует (нет ответа)
                 };
             }
         }

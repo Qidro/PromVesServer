@@ -6,12 +6,13 @@ using System.Text;
 
 namespace PromVesServer.Service
 {
+    //Сервис предназначен для создания TCP сервера и отправки клиентам данных по взвешиванию
     public class TcpServerService
     {
         private readonly ILogger<TcpServerService> _logger;
         private readonly CounterStorageService _storage;
         private TcpListener? _listener;
-        private int Port = 5002;
+        private int Port = 5002; //порт сервера
         public TcpServerService(ILogger<TcpServerService> logger, CounterStorageService storage)
         { 
             _logger = logger;
@@ -23,6 +24,7 @@ namespace PromVesServer.Service
             // Получаем локальный IP
             IPAddress ipAddress = GetLocalIPAddress();
             _listener = new TcpListener(ipAddress, Port);
+            //запуск сервера
             _listener.Start();
 
             _logger.LogInformation("TCP сервер запущен: {ip}:{port}", ipAddress, Port);
@@ -78,6 +80,7 @@ namespace PromVesServer.Service
                client.Close();
             }
         }
+        //получение IP
         private static IPAddress GetLocalIPAddress()
         {
             var host = Dns.GetHostEntry(Dns.GetHostName());

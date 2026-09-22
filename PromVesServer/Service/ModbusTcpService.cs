@@ -14,13 +14,19 @@ using System.Text.Json;
 
 namespace PromVesServer.Service
 {
+    //сервис предназначен для получения взвешивания, используя протокол ModbusTcp
+    //используется обертка протокола Modbus RTU в TCP для устройства MOXA
     public class ModbusTcpService
     {
         private readonly ILogger<ModbusTcpService> _logger;
         private readonly CounterStorageService _storage;
+        //индификатор сервера
         private readonly int IdPort;
+        //индификатор устройства
         private readonly int IdSlave;
+        //IP нашего устройства
         private readonly string NportIp;
+        //Порт устройства 
         private readonly int NportPort;
         public ModbusTcpService(ILogger<ModbusTcpService> logger, CounterStorageService storage, ModbusTcpSettingModel modbusTcpSettingModel)
         { 
@@ -30,7 +36,7 @@ namespace PromVesServer.Service
             IdSlave = modbusTcpSettingModel.SlaveId;
             NportIp = modbusTcpSettingModel.NportIp;
             NportPort = modbusTcpSettingModel.NportPort;
-            //регистрация
+            //инициализация первого значения
             _storage.InitPort(IdPort);
         }
         
@@ -52,6 +58,7 @@ namespace PromVesServer.Service
                 {
                     client = new TcpClient();
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    //ожидания полкдлючения на 5 секунд
                     await client.ConnectAsync(
                     NportIp,
                     NportPort,

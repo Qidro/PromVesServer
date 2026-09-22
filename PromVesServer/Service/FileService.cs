@@ -7,17 +7,23 @@ using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace PromVesServer.Service
 {
+    //Сервис предназначен для записи в файл показания соединения и веса. 
+    //Предполагается, что файл будет использоваться для подтягивания в 1С
     public class FileService
     {
+        //Название файла
         private readonly string _filePath = "weighing.txt";
         private readonly CounterStorageService _storage;
+        //общая модель взвешивания
         private List<WeighingDeviceValue> weighingDeviceValue = new List<WeighingDeviceValue>();
+        //модель устройства
         private List<string> WeighingCards;
         private string WeighingResult;
+        //Статус одного устройства
         private string Status;
-        private string StatusSum;
-        private double SumWeighing;
+        //Общий статус взвешивания
         private string StatusWeighing;
+        //Общий Вес
         private decimal totalWeight;
         private readonly ILogger<FileService> _logger;
         public FileService(ILogger<FileService> logger, CounterStorageService storage)

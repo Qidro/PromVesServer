@@ -192,7 +192,7 @@ namespace PromVesServer.Service
             }
 
         }
-
+        //получение данных конфигурации для Com порта табла
         public async Task<ServiceResult<List<SerialPortBoardSettingsModel>>> GetBoardSettingAsync()
         {
             try
