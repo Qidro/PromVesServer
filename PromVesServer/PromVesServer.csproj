@@ -12,12 +12,28 @@
   <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.10" />
   <PackageReference Include="NModbus" Version="3.0.83" />
   <PackageReference Include="NModbus.Serial" Version="3.0.83" />
+  <PackageReference Include="Serilog.Extensions.Hosting" Version="10.0.0" />
+  <PackageReference Include="Serilog.Settings.Configuration" Version="10.0.1" />
+  <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+  <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
   <PackageReference Include="System.IO.Ports" Version="10.0.9" />
 </ItemGroup>
 
   <ItemGroup>
-    <Content Update="GeneralConfigurator.json">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
+  <Content Update="Configuration\ConfigModbusTcp.json">
+    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+  </Content>
+
+  <Content Update="Configuration\ConfigPort.json">
+    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+  </Content>
+
+  <Content Update="Configuration\ConfigPortBoard.json">
+    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+  </Content>
+
+  <Content Update="Configuration\GeneralConfigurator.json">
+    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+  </Content>
+</ItemGroup>
 </Project>

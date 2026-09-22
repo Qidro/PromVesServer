@@ -11,10 +11,15 @@ using System.Text.RegularExpressions;
 using System.Xml.Linq;
 namespace PromVesServer.Service
 {
+    //Сервис предназначен для иницилазации com порта, получения данных с устройства (беспрерываная передача данных или по Modbus Rtu)
+    //и запись полученных результатов в хранилище взвешивания
     public class ComPortService
     {
+        //индификатор порта
         private readonly int IdPort;
+        //индификатор устройства
         private readonly int IdSlave;
+        //название порта
         private readonly string NamePort;
         private readonly SerialPort _serialPort;
         private readonly ILogger<ComPortService> _logger;
@@ -44,13 +49,12 @@ namespace PromVesServer.Service
             _logger = logger;
             _storage = storage;
             _modbusRtu = modbusRtu;
+            //инициализация первых данных
             _storage.InitPort(IdPort);
             _logger.LogDebug(
         $"Создан ComPortService: Id={IdPort}, Port={NamePort}");
         }
-
-        //private const int PacketSize = 11;
-
+        //метод открытия com порта и получение данных от устройства по выбранному протоколуы
         public async Task ConnectSerialPort(CancellationToken cancellationToken)
         {
             var adapter = new SerialPortAdapter(_serialPort);
@@ -65,6 +69,7 @@ namespace PromVesServer.Service
                     _serialPort.Open();
                     _logger.LogInformation("Подключили {Port}", NamePort);
                     //------------------------------------
+                    //если протоколом являвется modbusRtu
                     if (_modbusRtu == true)
                     {
                         while (!cancellationToken.IsCancellationRequested)
@@ -90,7 +95,7 @@ namespace PromVesServer.Service
                             await Task.Delay(1000, cancellationToken);
                         }
                     }
-                    else
+                    else //если беспрерывная передача данных
                     {
                         //---------------------------------------------
 

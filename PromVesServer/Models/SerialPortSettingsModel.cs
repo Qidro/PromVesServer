@@ -5,6 +5,7 @@ using System.Text;
 
 namespace PromVesServer.Models
 {
+    //модель для хранения конфига Com порта
     public class SerialPortSettingsModel
     {
         public int Id { get; set; }

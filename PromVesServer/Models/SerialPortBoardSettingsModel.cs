@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 
 namespace PromVesServer.Models
 {
+    //модель для хранения конфига Com порта табла
     public class SerialPortBoardSettingsModel
     {
         public int Id { get; set; }

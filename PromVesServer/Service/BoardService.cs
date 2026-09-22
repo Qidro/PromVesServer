@@ -10,6 +10,7 @@ using System.Text;
 
 namespace PromVesServer.Service
 {
+    //сервис табла, предназначен для инициализации Com порта и передачи данных на определенное табло 
     public class BoardService
     {
         //id Com порта
@@ -151,7 +152,6 @@ namespace PromVesServer.Service
             {
                 try
                 {
-                    //_serialPort.Encoding = Encoding.ASCII;
                     //открываем com порт
                     _serialPort.Open();
                     _logger.LogInformation("Подключили {Port}", NamePort);

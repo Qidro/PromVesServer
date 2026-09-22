@@ -16,7 +16,7 @@ namespace PromVesServer.Service
         {
             _logger = logger;
         }
-
+        //получение глпаной конфигурации
         public ServiceResult<GeneralConfiguratorModel> GetConfigProtocol()
         {
             //var json = File.ReadAllText("GeneralConfigurator.json");
@@ -26,7 +26,14 @@ namespace PromVesServer.Service
             //GeneralConfiguratorModel model = root.GeneralConfigurator;
             try
             {
-                const string filePath = "GeneralConfigurator.json";
+                //название файла
+                const string fileName = "GeneralConfigurator.json";
+
+                string filePath = Path.Combine(
+                    AppContext.BaseDirectory,
+                    "Configuration",
+                    fileName
+                );
 
                 // Проверяем существование файла
                 if (!File.Exists(filePath))
@@ -123,8 +130,15 @@ namespace PromVesServer.Service
         {
             try
             {
+                const string fileName = "ConfigModbusTcp.json";
+
+                string filePath = Path.Combine(
+                    AppContext.BaseDirectory,
+                    "Configuration",
+                    fileName
+                );
                 //считываем файл
-                string json = await File.ReadAllTextAsync("ConfigModbusTcp.json");
+                string json = await File.ReadAllTextAsync(filePath);
 
                 ModbusTcpSettingRoot config =
                     JsonSerializer.Deserialize<ModbusTcpSettingRoot>(json)
@@ -183,8 +197,16 @@ namespace PromVesServer.Service
         {
             try
             {
+                //название файла
+                const string fileName = "ConfigPortBoard.json";
+                //Относительный путь 
+                string filePath = Path.Combine(
+                    AppContext.BaseDirectory,
+                    "Configuration",
+                    fileName
+                );
                 // считываем файл
-                string json = await File.ReadAllTextAsync("ConfigPortBoard.json");
+                string json = await File.ReadAllTextAsync(filePath);
 
                 var options = new JsonSerializerOptions
                 {
