@@ -1,6 +1,6 @@
 {
   "GeneralConfigurator": {
     "Protocol": "ModbusTcp",
-    "Board": "GreenBoard"
+    "Board": "YHLBoard"
   }
 }

@@ -10,19 +10,13 @@
       "Id": 2,
       "NportIp": "192.168.1.100",
       "NportPort": 4002,
-      "SlaveId": 2
+      "SlaveId": 2 
     },
     {
       "Id": 3,
       "NportIp": "192.168.1.100",
       "NportPort": 4003,
       "SlaveId": 1
-    },
-    {
-      "Id": 4,
-      "NportIp": "192.168.1.100",
-      "NportPort": 4004,
-      "SlaveId": 3
     }
   ]
 }

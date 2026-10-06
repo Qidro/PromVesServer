@@ -11,8 +11,8 @@ namespace PromVesServer.Service
     //Предполагается, что файл будет использоваться для подтягивания в 1С
     public class FileService
     {
-        //Название файла
-        private readonly string _filePath = "weighing.txt";
+        //путь и название файла 
+        private readonly string _filePath = @"C:\PromVesNew\weighing.txt";
         private readonly CounterStorageService _storage;
         //общая модель взвешивания
         private List<WeighingDeviceValue> weighingDeviceValue = new List<WeighingDeviceValue>();
