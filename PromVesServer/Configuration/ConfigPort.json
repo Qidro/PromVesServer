@@ -2,43 +2,12 @@
   "SerialPorts": [
     {
       "Id": 1,
-      "PortName": "COM7",
-      "BaudRate": 115200,
+      "PortName": "COM2",
+      "BaudRate": 1200,
       "DataBits": 8,
       "Parity": "None",
       "StopBits": "One",
-      "Handshake": "None",
-      "slaveAddress": 4
-    },
-    {
-      "Id": 2,
-      "PortName": "COM9",
-      "BaudRate": 115200,
-      "DataBits": 8,
-      "Parity": "None",
-      "StopBits": "One",
-      "Handshake": "None",
-      "slaveAddress": 2
-    },
-    {
-      "Id": 3,
-      "PortName": "COM11",
-      "BaudRate": 115200,
-      "DataBits": 8,
-      "Parity": "None",
-      "StopBits": "One",
-      "Handshake": "None",
-      "slaveAddress": 1
-    },
-    {
-      "Id": 4,
-      "PortName": "COM12",
-      "BaudRate": 115200,
-      "DataBits": 8,
-      "Parity": "None",
-      "StopBits": "One",
-      "Handshake": "None",
-      "slaveAddress": 3
+      "Handshake": "None"
     }
   ]
 }

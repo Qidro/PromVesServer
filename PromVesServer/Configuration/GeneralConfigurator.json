@@ -1,6 +1,6 @@
 {
   "GeneralConfigurator": {
-    "Protocol": "ModbusTcp",
-    "Board": "YHLBoard"
+    "Protocol": "Titan",
+    "Board": "None"
   }
 }

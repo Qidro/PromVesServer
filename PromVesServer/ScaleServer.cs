@@ -116,6 +116,24 @@ namespace PromVesServer
                         _comPortService.ConnectSerialPort(stoppingToken));
                 }
             }
+            else if(resutConfig.Data.Protocol == "Titan")
+            {
+                foreach (var port in ports)
+                {
+                    _logger.LogDebug("Записываем com порт для Titan");
+                    //создаем для каждого обьекта свой logger
+                    var readerLogger = _loggerFactory.CreateLogger<ComPortService>();
+
+                    var _comPortService = new ComPortService(port,
+                        readerLogger,
+                        _storage,
+                        resutConfig.Data.Protocol == "Titan");
+                    //создание нового компонента в List
+                    tasks.Add(
+                        _comPortService.ConnectSerialPortTitan(stoppingToken));
+                }
+                //ConnectSerialPortTitan
+            }
             else
             {
                 //вызов метода получения конфигурации
@@ -134,13 +152,13 @@ namespace PromVesServer
                             readerLogger,
                             _storage,
                             settingConnect);
-                         
+
                         //создание нового компонента в List
                         tasks.Add(
                             _comPortService.ConnectMosbucTcp(stoppingToken));
                     }
                 }
-                else 
+                else
                 {
                     _logger.LogWarning("Произошла ошибка получения конфигурации протокола, причина:" + result.Message);
                 }
