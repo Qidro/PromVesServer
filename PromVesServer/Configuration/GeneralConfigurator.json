@@ -1,6 +1,6 @@
 {
   "GeneralConfigurator": {
-    "Protocol": "Titan",
+    "Protocol": "ModbusRtu",
     "Board": "None"
   }
 }

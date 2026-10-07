@@ -23,7 +23,7 @@ namespace PromVesServer.Service
             }
         }
         //обновление значения по Id
-        public void UpdateValue(int portId, int value)
+        public void UpdateValue(int portId, decimal value)
         {
             //добовляем новое ключ значение, если его не было, или обновляем его значения
             lock (_lock)

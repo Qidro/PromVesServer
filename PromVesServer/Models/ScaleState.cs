@@ -7,7 +7,7 @@ namespace PromVesServer.Models
     class ScaleState
     {
         //вес
-        public int Weight { get; set; }
+        public decimal Weight { get; set; }
         //последнее обновление веса
         public DateTime LastUpdate { get; set; }
         //при инициализации

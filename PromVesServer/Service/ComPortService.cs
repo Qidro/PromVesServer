@@ -248,7 +248,7 @@ namespace PromVesServer.Service
                             messageBuffer.Remove(0, endIndex + 2);
 
                             // Например: "n00838.8kg"
-                            if (TryParseWeight(message, out int weight))
+                            if (TryParseWeight(message, out decimal weight))
                             {
                                 //_logger.LogInformation(
                                 //    "Вес {Port}: {Weight} кг",
@@ -259,6 +259,7 @@ namespace PromVesServer.Service
                             }
                             else
                             {
+                                _logger.LogDebug("не удалось перевести в int");
                                 //_logger.LogWarning(
                                 //    "Не удалось распарсить вес: [{Message}]",
                                 //    message);
@@ -298,7 +299,7 @@ namespace PromVesServer.Service
         }
         private static bool TryParseWeight(
         string message,
-         out int weight)
+         out decimal weight)
         {
             weight = 0;
 
@@ -320,7 +321,7 @@ namespace PromVesServer.Service
 
             message = message[..^2];
 
-            return int.TryParse(
+            return decimal.TryParse(
                 message,
                 NumberStyles.Number,
                 CultureInfo.InvariantCulture,
