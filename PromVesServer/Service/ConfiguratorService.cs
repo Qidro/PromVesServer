@@ -267,5 +267,89 @@ namespace PromVesServer.Service
             }
 
         }
+
+        // Получает настройки COM-порта, предназначенного для PN-протокола.
+        // Метод возвращает список, хотя текущая конфигурация содержит один PN-порт,
+        // чтобы формат был единообразным с другими конфигурациями приложения.
+        public async Task<ServiceResult<List<SerialPortSettingsModel>>> GetPNSettingAsync()
+        {
+            try
+            {
+                // Имя файла конфигурации PN.
+                const string fileName = "ConfigPN.json";
+
+                // Все конфигурационные файлы хранятся в каталоге Configuration
+                // рядом с исполняемым файлом приложения.
+                string filePath = Path.Combine(
+                    AppContext.BaseDirectory,
+                    "Configuration",
+                    fileName
+                );
+
+                // Асинхронно читаем содержимое JSON-файла.
+                string json = await File.ReadAllTextAsync(filePath);
+
+                // Enum-параметры COM-порта в JSON записаны строками:
+                // например, "None" для Parity и "One" для StopBits.
+                var options = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+                options.Converters.Add(new JsonStringEnumConverter());
+
+                // Преобразуем JSON в корневую модель SerialPortsPN.
+                SerialPortsPN config =
+                    JsonSerializer.Deserialize<SerialPortsPN>(json, options)
+                    ?? new SerialPortsPN();
+
+                // Записываем в журнал сведения о найденных PN-портах,
+                // чтобы можно было проверить загрузку конфигурации.
+                foreach (var setting in config.SerialPortPNSetting)
+                {
+                    _logger.LogDebug(
+                        $"PN COM-порт: Id={setting.Id}, " +
+                        $"Name={setting.PortName}, BaudRate={setting.BaudRate}");
+                }
+
+                // Возвращаем список настроек вызывающему коду.
+                return ServiceResult<List<SerialPortSettingsModel>>
+                    .Ok(config.SerialPortPNSetting);
+            }
+            catch (FileNotFoundException ex)
+            {
+                _logger.LogError($"Файл конфигурации PN не найден: {ex.Message}");
+                return ServiceResult<List<SerialPortSettingsModel>>.Fail(ex.Message);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogError(
+                    $"Нет доступа к файлу конфигурации PN: {ex.Message}");
+                return ServiceResult<List<SerialPortSettingsModel>>.Fail(ex.Message);
+            }
+            catch (DirectoryNotFoundException ex)
+            {
+                _logger.LogError(
+                    $"Директория конфигурации PN не найдена: {ex.Message}");
+                return ServiceResult<List<SerialPortSettingsModel>>.Fail(ex.Message);
+            }
+            catch (IOException ex)
+            {
+                _logger.LogError(
+                    $"Ошибка ввода-вывода при чтении конфигурации PN: {ex.Message}");
+                return ServiceResult<List<SerialPortSettingsModel>>.Fail(ex.Message);
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(
+                    $"Ошибка формата JSON в конфигурации PN: {ex.Message}");
+                return ServiceResult<List<SerialPortSettingsModel>>.Fail(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    $"Непредвиденная ошибка при загрузке конфигурации PN: {ex.Message}");
+                return ServiceResult<List<SerialPortSettingsModel>>.Fail(ex.Message);
+            }
+        }
     }
 }

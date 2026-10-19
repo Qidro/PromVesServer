@@ -12,17 +12,22 @@ namespace PromVesServer.Service
 
     public class PNService
     {
-        //индификатор канала
+        // Идентификатор канала PN. Поле оставлено для возможного использования
+        // при подключении нескольких независимых PN-устройств.
         private readonly int IdChanel;
+        // Имя COM-порта используется в сообщениях журнала.
         private readonly string NamePort;
+        // Объект последовательного порта, через который принимаются PN-кадры.
         private readonly SerialPort _serialPort;
+        // Логгер для диагностики подключения, пакетов и ошибок чтения.
         private readonly ILogger<PNService> _logger;
-        //обьект класса, который записывает значеник com портов
-        private readonly CounterStorageService _storage;
-        public PNService(SerialPortSettingsModel settings, ILogger<PNService> logger, CounterStorageService storage, bool modbusRtu)
+        // Общее хранилище состояний шести каналов PN.
+        private readonly CounterStorageServicePN _storage;
+
+        public PNService(SerialPortSettingsModel settings, ILogger<PNService> logger, CounterStorageServicePN storage)
         {
             NamePort = settings.PortName;
-            //настройка порта
+            // Параметры COM-порта берутся из конфигурации приложения.
             _serialPort = new SerialPort
             {
                 PortName = settings.PortName,
@@ -34,32 +39,62 @@ namespace PromVesServer.Service
             };
             _logger = logger;
             _storage = storage;
-            for(int i = 0; i < 6; i++)
+
+            // PN-контроллер передаёт ровно шесть значений.
+            // Инициализируем все каналы до получения первого корректного кадра,
+            // чтобы они сразу присутствовали в хранилище со статусом OFFLINE.
+            for (int i = 0; i < 6; i++)
             {
-                //инициализация первых данных
-                _storage.InitPort(i+1);
+                _storage.InitPort(i + 1);
             }
             _logger.LogDebug(
         $"Создан ComPortService: Port={NamePort}");
         }
-        public async Task ConnectSerialPort(CancellationToken cancellationToken)
+        public async Task ConnectPortPN(CancellationToken cancellationToken)
         {
+            // PN-протокол использует байты, поэтому кодировка консоли
+            // влияет только на отображение диагностических сообщений.
             Console.OutputEncoding = Encoding.UTF8;
+
+            // PnReceiver накапливает произвольные блоки, прочитанные из COM-порта,
+            // выделяет из них кадры и проверяет их целостность.
             var receiver = new PnReceiver();
+            // Один буфер может содержать как часть кадра, так и несколько кадров.
             byte[] buffer = new byte[4096];
+            // Общий таймер используется для контроля времени получения данных.
             var timer = Stopwatch.StartNew();
+            // Время последнего диагностического вывода, чтобы не писать в журнал
+            // чаще одного раза примерно за 250 миллисекунд.
             long lastPrint = -250;
+            // Время получения последнего корректного кадра.
             long lastValid = -1;
+            // Счётчики корректных и отклонённых кадров.
             long good = 0;
             long bad = 0;
+            // Последний корректный массив из шести значений.
             int[] latest = null;
 
+            // Обработчик вызывается PnReceiver только после успешной проверки
+            // длины, кода операции и CRC кадра.
             receiver.FrameReceived += values =>
             {
                 latest = values;
+
+                // В массиве значения расположены по порядку каналов:
+                // values[0] — канал 1, values[1] — канал 2 ... values[5] — канал 6.
+                // Поэтому i + 1 используется как идентификатор канала в хранилище.
+                for (int i = 0; i < latest.Length; i++)
+                {
+                    _storage.UpdateValue(i + 1, latest[i]);
+                }
+
                 lastValid = timer.ElapsedMilliseconds;
                 good++;
             };
+
+            // Этот обработчик вызывается, если кадр не прошёл проверку.
+            // Счётчик bad нужен для диагностики, а первые три причины выводятся
+            // в журнал, чтобы неисправный поток данных не переполнил лог.
             receiver.FrameRejected += reason =>
             {
                 bad++;
@@ -71,14 +106,13 @@ namespace PromVesServer.Service
             { 
                 try
                 {
-                    //открываем com порт
+                    // Открываем COM-порт и отправляем команды, необходимые
+                    // для запуска передачи данных PN-контроллером.
                     _serialPort.Open();
-                    //первая команда
                     byte[] command =
                     {
                     0xFF, 0x03, 0xFD, 0xF4, 0xFF
                     };
-                    //вторая команда
                     byte[] comman2 =
                         {
                     0xFF, 0x04, 0xCE, 0x0C, 0x05,0xFF
@@ -86,14 +120,20 @@ namespace PromVesServer.Service
 
                     _serialPort.Write(command, 0, command.Length);
                     _logger.LogDebug(_serialPort.PortName + " открыт: 115200, 8N1.");
+                    // Даём устройству время обработать первую команду.
                     Thread.Sleep(1000);
                     _serialPort.Write(comman2, 0, comman2.Length);
                     Thread.Sleep(1000);
+
+                    // После открытия порта постоянно читаем входящие данные,
+                    // пока не будет отменена операция.
                     while (true)
                     {
                         try
                         {
                             int read = _serialPort.Read(buffer, 0, buffer.Length);
+                            // Один вызов Read не обязан возвращать ровно один кадр.
+                            // Feed самостоятельно накапливает и разделяет поток байтов.
                             receiver.Feed(buffer, read);
                         }
                         catch (TimeoutException)
@@ -108,6 +148,8 @@ namespace PromVesServer.Service
                             
                         if (latest == null)
                         {
+                            // Пока корректный кадр ещё не получен, показываем
+                            // количество отклонённых пакетов и продолжаем чтение.
                             _logger.LogDebug("Ожидание корректного пакета; ошибок=" + bad);
                             continue;
                         }
@@ -115,13 +157,15 @@ namespace PromVesServer.Service
                         long age = now - lastValid;
                         if (age > 2000)
                         {
+                            // Последний кадр слишком старый. Значения остаются
+                            // в памяти, но не считаются актуальными для диагностики.
                             _logger.LogDebug("НЕТ СВЕЖИХ ДАННЫХ: " + age +
                                 " мс; принято=" + good + "; ошибок=" + bad);
                             continue;
                         }
 
                         var line = new StringBuilder();
-                        //запись поледних полученных данных
+                        // Формируем удобную строку для журнала: V1=... | V2=...
                         for (int i = 0; i < latest.Length; i++)
                         {
                             if (i > 0) line.Append(" | ");
@@ -152,7 +196,7 @@ namespace PromVesServer.Service
                 {
                     if (_serialPort.IsOpen)
                         _serialPort.Close();
-                    // Ждём 1 секунду перед новой попыткой подключения
+                    // После ошибки закрываем порт и ждём перед повторным подключением.
                     if (!cancellationToken.IsCancellationRequested)
                     {
                         await Task.Delay(3000, cancellationToken);
@@ -182,16 +226,25 @@ namespace PromVesServer.Service
             for (int i = 0; i < count; i++)
             {
                 byte b = bytes[i];
+
+                // Байтом 0xFF PN обозначает границу кадра.
                 if (b == 0xFF)
                 {
+                    // Если предыдущий кадр уже накапливался, 0xFF завершает его.
                     if (synchronized && frame.Count > 0)
                         ProcessFrame(frame.ToArray());
+
+                    // Начинаем накопление нового кадра после найденной границы.
                     frame.Clear();
                     synchronized = true;
                     continue;
                 }
 
+                // До первой границы кадра входные байты игнорируются,
+                // потому что поток ещё не синхронизирован.
                 if (!synchronized) continue;
+
+                // Защита от бесконечного накопления повреждённого кадра.
                 if (frame.Count >= EncodedLength)
                 {
                     Reject("длина больше 21 байта; повторная синхронизация");
@@ -203,6 +256,7 @@ namespace PromVesServer.Service
             }
         }
 
+        // Проверяет и декодирует один накопленный кадр.
         private void ProcessFrame(byte[] encoded)
         {
             if (encoded.Length != EncodedLength)
@@ -211,9 +265,9 @@ namespace PromVesServer.Service
                 return;
             }
 
-            // Первый байт — расстояние до следующей замены FF либо конца.
-            // В позиции замены хранится расстояние до следующей замены.
-            // Сначала читаем расстояние, затем восстанавливаем FF.
+            // В закодированном кадре байт, равный 0xFF, заменён расстоянием
+            // до следующего такого байта. Сначала восстанавливаем исходные 0xFF,
+            // затем проверяем полезную нагрузку и CRC.
             int position = 0;
             while (true)
             {
@@ -224,12 +278,15 @@ namespace PromVesServer.Service
                     return;
                 }
                 int next = position + distance;
+                // В первой позиции находится служебное расстояние,
+                // а последующие позиции заменяются на исходный 0xFF.
                 if (position > 0) encoded[position] = 0xFF;
                 if (next == encoded.Length) break;
                 position = next;
             }
 
-            // Исключаем начальный служебный байт, оставляем CC, данные, CRC.
+            // Убираем начальный служебный байт. В payload остаются код операции,
+            // данные шести каналов и контрольная сумма.
             byte[] payload = new byte[encoded.Length - 1];
             Array.Copy(encoded, 1, payload, 0, payload.Length);
             if (payload[0] != 0xCC)
@@ -243,6 +300,8 @@ namespace PromVesServer.Service
                 return;
             }
 
+            // Каждый канал занимает три байта и хранится в формате little-endian.
+            // В результате получаем ровно шесть целочисленных значений.
             int[] values = new int[6];
             for (int i = 0; i < values.Length; i++)
             {
@@ -254,9 +313,9 @@ namespace PromVesServer.Service
             FrameReceived?.Invoke(values);
         }
 
-        // Буквальный алгоритм CRCMaker со стр. 2 приложенного протокола.
-        // При проверке обрабатываем CC, восстановленные данные и сам CRC.
-        // Нулевой остаток означает успешную проверку.
+        // Расчёт CRC по алгоритму PN-протокола.
+        // Проверяется код операции, восстановленные данные и сама CRC.
+        // Нулевой остаток означает, что кадр не повреждён.
         private static byte Crc69(byte[] bytes)
         {
             int crc = 0;
@@ -274,6 +333,8 @@ namespace PromVesServer.Service
 
         private void Reject(string reason)
         {
+            // Передаём причину отказа владельцу приёмника,
+            // чтобы PNService мог записать её в журнал.
             FrameRejected?.Invoke(reason);
         }
     }

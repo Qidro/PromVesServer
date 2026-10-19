@@ -12,17 +12,19 @@ namespace PromVesServer
         //общий обьект для других классов, отвечает за сохранение данных с com портов
         private readonly CounterStorageService _storage;
         //
+        private readonly CounterStorageServicePN _storagePN;
         private readonly ConfiguratorService _configuratorService;
         private readonly IHostApplicationLifetime _hostApplicationLifetime;
         //конфигурацич modbus
         //private readonly ModbusTcpService _modbusTcpService;
         public ScaleServer(IConfiguration configuration, ILogger<ScaleServer> logger, ILoggerFactory loggerFactory, 
-            CounterStorageService storage, ConfiguratorService configuratorService, IHostApplicationLifetime hostApplicationLifetime)
+            CounterStorageService storage, CounterStorageServicePN storagePN, ConfiguratorService configuratorService, IHostApplicationLifetime hostApplicationLifetime)
         {
             _configuration = configuration;
             _logger = logger;
             _loggerFactory = loggerFactory;
             _storage = storage;
+            _storagePN = storagePN;
             _configuratorService = configuratorService;
             _hostApplicationLifetime = hostApplicationLifetime;
         }
@@ -134,7 +136,7 @@ namespace PromVesServer
                 }
                 //ConnectSerialPortTitan
             }
-            else
+            else if(resutConfig.Data.Protocol == "ModbusTcp")
             {
                 //вызов метода получения конфигурации
                 var result = await _configuratorService.GetModbusTcpSettingAsync();
@@ -163,7 +165,36 @@ namespace PromVesServer
                     _logger.LogWarning("Произошла ошибка получения конфигурации протокола, причина:" + result.Message);
                 }
             }
-            
+            else if (resutConfig.Data.Protocol == "PN")
+            {
+                //вызов метода получения конфигурации
+                var result = await _configuratorService.GetPNSettingAsync();
+                //проверка результата
+                if (result.Success == true)
+                {
+                    //перебираем ports с конфигурациями com портов 
+                    foreach (var settingConnectPN in result.Data)
+                    {
+                        _logger.LogDebug("Записываем данные подключения PN");
+                        //создаем для каждого обьекта свой logger
+                        var readerLogger = _loggerFactory.CreateLogger<PNService>();
+
+                        var _comPortService = new PNService(
+                            settingConnectPN,
+                            readerLogger,
+                            _storagePN);
+
+                        //создание нового компонента в List
+                        //tasks.Add(
+                        //    _comPortService.ConnectMosbucTcp(stoppingToken));
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("Произошла ошибка получения конфигурации протокола, причина:" + result.Message);
+                }
+            }
+
             //отдельный логер для класса TcpServerService
             var readerLoggerTcpServerService = _loggerFactory.CreateLogger<TcpServerService>();
             TcpServerService tcp = new TcpServerService(readerLoggerTcpServerService, _storage);
