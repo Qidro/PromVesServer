@@ -22,9 +22,10 @@ namespace PromVesServer.Service
         // Логгер для диагностики подключения, пакетов и ошибок чтения.
         private readonly ILogger<PNService> _logger;
         // Общее хранилище состояний шести каналов PN.
-        private readonly CounterStorageServicePN _storage;
+        private readonly CounterStoragePNService _storageCalibration;
+        private readonly CounterStorageService _storage;
 
-        public PNService(SerialPortSettingsModel settings, ILogger<PNService> logger, CounterStorageServicePN storage)
+        public PNService(SerialPortSettingsModel settings, ILogger<PNService> logger, CounterStoragePNService storageCalibration, CounterStorageService storage)
         {
             NamePort = settings.PortName;
             // Параметры COM-порта берутся из конфигурации приложения.
@@ -38,14 +39,14 @@ namespace PromVesServer.Service
                 Handshake = settings.Handshake
             };
             _logger = logger;
+            _storageCalibration = storageCalibration;
             _storage = storage;
-
             // PN-контроллер передаёт ровно шесть значений.
             // Инициализируем все каналы до получения первого корректного кадра,
             // чтобы они сразу присутствовали в хранилище со статусом OFFLINE.
             for (int i = 0; i < 6; i++)
             {
-                _storage.InitPort(i + 1);
+                _storageCalibration.InitPort(i + 1);
             }
             _logger.LogDebug(
         $"Создан ComPortService: Port={NamePort}");
@@ -85,7 +86,7 @@ namespace PromVesServer.Service
                 // Поэтому i + 1 используется как идентификатор канала в хранилище.
                 for (int i = 0; i < latest.Length; i++)
                 {
-                    _storage.UpdateValue(i + 1, latest[i]);
+                    _storageCalibration.UpdateValue(i + 1, latest[i]);
                 }
 
                 lastValid = timer.ElapsedMilliseconds;

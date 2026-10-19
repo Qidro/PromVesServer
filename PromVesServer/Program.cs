@@ -44,7 +44,7 @@ try
     builder.Services.AddHostedService<ScaleServer>();
     builder.Services.AddSingleton<ConfiguratorService>();
     builder.Services.AddSingleton<CounterStorageService>();
-    builder.Services.AddSingleton<CounterStorageServicePN>();
+    builder.Services.AddSingleton<CounterStoragePNService>();
 
     var host = builder.Build();
 

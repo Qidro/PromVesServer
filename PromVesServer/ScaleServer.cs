@@ -12,13 +12,13 @@ namespace PromVesServer
         //общий обьект для других классов, отвечает за сохранение данных с com портов
         private readonly CounterStorageService _storage;
         //
-        private readonly CounterStorageServicePN _storagePN;
+        private readonly CounterStoragePNService _storagePN;
         private readonly ConfiguratorService _configuratorService;
         private readonly IHostApplicationLifetime _hostApplicationLifetime;
         //конфигурацич modbus
         //private readonly ModbusTcpService _modbusTcpService;
         public ScaleServer(IConfiguration configuration, ILogger<ScaleServer> logger, ILoggerFactory loggerFactory, 
-            CounterStorageService storage, CounterStorageServicePN storagePN, ConfiguratorService configuratorService, IHostApplicationLifetime hostApplicationLifetime)
+            CounterStorageService storage, CounterStoragePNService storagePN, ConfiguratorService configuratorService, IHostApplicationLifetime hostApplicationLifetime)
         {
             _configuration = configuration;
             _logger = logger;
@@ -182,7 +182,8 @@ namespace PromVesServer
                         var _comPortService = new PNService(
                             settingConnectPN,
                             readerLogger,
-                            _storagePN);
+                            _storagePN,
+                            _storage);
 
                         //создание нового компонента в List
                         //tasks.Add(

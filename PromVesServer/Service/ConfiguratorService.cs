@@ -351,5 +351,90 @@ namespace PromVesServer.Service
                 return ServiceResult<List<SerialPortSettingsModel>>.Fail(ex.Message);
             }
         }
+
+        // Асинхронно загружает настройки калибровки PN из ConfigСalibration.json.
+        // Метод возвращает список настроек, чтобы вызывающий код мог найти
+        // калибровку нужного канала по свойству ChannelNumber.
+        public async Task<ServiceResult<List<PNCalibrationSettingModel>>> GetPNCalibrationSettingAsync()
+        {
+            try
+            {
+                // Имя файла с настройками калибровки PN.
+                const string fileName = "ConfigСalibration.json";
+
+                // Конфигурация хранится в каталоге Configuration
+                // относительно каталога запуска приложения.
+                string filePath = Path.Combine(
+                    AppContext.BaseDirectory,
+                    "Configuration",
+                    fileName
+                );
+
+                // Читаем файл асинхронно, чтобы не блокировать поток приложения.
+                string json = await File.ReadAllTextAsync(filePath);
+
+                // Имена свойств JSON сопоставляются с именами свойств модели
+                // без учёта регистра символов.
+                var options = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+
+                // Преобразуем JSON в корневую модель с секцией PNSetting.
+                PNCalibrationSettings config =
+                    JsonSerializer.Deserialize<PNCalibrationSettings>(json, options)
+                    ?? new PNCalibrationSettings();
+
+                // Записываем загруженные каналы в журнал для диагностики.
+                foreach (var setting in config.PNSetting)
+                {
+                    _logger.LogDebug(
+                        $"Калибровка PN: ChannelNumber={setting.ChannelNumber}, " +
+                        $"ZeroCode={setting.ZeroCode}, " +
+                        $"ReferenceCode={setting.ReferenceCode}, " +
+                        $"ReferenceWeight={setting.ReferenceWeight}, " +
+                        $"WeightCoefficient={setting.WeightCoefficient}");
+                }
+
+                return ServiceResult<List<PNCalibrationSettingModel>>
+                    .Ok(config.PNSetting);
+            }
+            catch (FileNotFoundException ex)
+            {
+                _logger.LogError(
+                    $"Файл калибровки PN не найден: {ex.Message}");
+                return ServiceResult<List<PNCalibrationSettingModel>>.Fail(ex.Message);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogError(
+                    $"Нет доступа к файлу калибровки PN: {ex.Message}");
+                return ServiceResult<List<PNCalibrationSettingModel>>.Fail(ex.Message);
+            }
+            catch (DirectoryNotFoundException ex)
+            {
+                _logger.LogError(
+                    $"Директория конфигурации калибровки PN не найдена: {ex.Message}");
+                return ServiceResult<List<PNCalibrationSettingModel>>.Fail(ex.Message);
+            }
+            catch (IOException ex)
+            {
+                _logger.LogError(
+                    $"Ошибка ввода-вывода при чтении калибровки PN: {ex.Message}");
+                return ServiceResult<List<PNCalibrationSettingModel>>.Fail(ex.Message);
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(
+                    $"Ошибка формата JSON в файле калибровки PN: {ex.Message}");
+                return ServiceResult<List<PNCalibrationSettingModel>>.Fail(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    $"Непредвиденная ошибка при загрузке калибровки PN: {ex.Message}");
+                return ServiceResult<List<PNCalibrationSettingModel>>.Fail(ex.Message);
+            }
+        }
     }
 }

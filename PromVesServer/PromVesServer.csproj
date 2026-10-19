@@ -32,6 +32,10 @@
     <CopyToOutputDirectory>Always</CopyToOutputDirectory>
   </Content>
 
+  <Content Update="Configuration\ConfigÑalibration.json">
+    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+  </Content>
+
   <Content Update="Configuration\ConfigPortBoard.json">
     <CopyToOutputDirectory>Always</CopyToOutputDirectory>
   </Content>

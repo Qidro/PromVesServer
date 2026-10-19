@@ -1,0 +1,46 @@
+{
+  "PNSetting": [
+    {
+      "ChannelNumber": 3123123,
+      "ZeroCode": 0,
+      "ReferenceCode": 0,
+      "ReferenceWeight": 0,
+      "WeightCoefficient": 0
+    },
+    {
+      "ChannelNumber": 3123123,
+      "ZeroCode": 32,
+      "ReferenceCode": 0,
+      "ReferenceWeight": 131,
+      "WeightCoefficient": 0
+    },
+    {
+      "ChannelNumber": 12312,
+      "ZeroCode": 3123,
+      "ReferenceCode": 3131,
+      "ReferenceWeight": 0,
+      "WeightCoefficient": 0
+    },
+    {
+      "ChannelNumber": 3213,
+      "ZeroCode": 0,
+      "ReferenceCode": 231,
+      "ReferenceWeight": 0,
+      "WeightCoefficient": 0
+    },
+    {
+      "ChannelNumber": 312,
+      "ZeroCode": 231,
+      "ReferenceCode": 0,
+      "ReferenceWeight": 0,
+      "WeightCoefficient": 0
+    },
+    {
+      "ChannelNumber": 312,
+      "ZeroCode": 0,
+      "ReferenceCode": 0,
+      "ReferenceWeight": 312,
+      "WeightCoefficient": 0
+    }
+  ]
+}
