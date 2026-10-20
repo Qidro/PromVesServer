@@ -189,12 +189,42 @@ namespace PromVesServer.Service
                 }
                 finally
                 {
-                    if (_serialPort.IsOpen)
-                        _serialPort.Close();
-                    // Ждём 1 секунду перед новой попыткой подключения
-                    if (!cancellationToken.IsCancellationRequested)
+                    try
                     {
-                        await Task.Delay(3000, cancellationToken);
+                        // После ошибки закрываем порт перед повторным подключением.
+                        if (_serialPort.IsOpen)
+                            _serialPort.Close();
+
+                        // Ждём перед повторной попыткой подключения.
+                        // Ожидание пропускается, если сервис уже остановлен.
+                        if (!cancellationToken.IsCancellationRequested)
+                        {
+                            await Task.Delay(3000, cancellationToken);
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Отмена задержки является штатным завершением работы,
+                        // а не ошибкой COM-порта.
+                        _logger.LogDebug("Ожидание повторного подключения отменено для порта {Port}", NamePort);
+                    }
+                    catch (UnauthorizedAccessException ex)
+                    {
+                        _logger.LogError(ex, "Нет доступа при закрытии порта {Port}", NamePort);
+                    }
+                    catch (IOException ex)
+                    {
+                        _logger.LogError(ex, "Ошибка ввода-вывода при закрытии порта {Port}", NamePort);
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        _logger.LogError(ex, "Некорректное состояние порта {Port} при завершении цикла", NamePort);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Защищаем метод от выхода исключения из finally,
+                        // чтобы ошибка очистки не остановила весь сервис.
+                        _logger.LogError(ex, "Ошибка завершения работы с портом {Port}", NamePort);
                     }
                 }
             }
@@ -287,12 +317,42 @@ namespace PromVesServer.Service
                 }
                 finally
                 {
-                    if (_serialPort.IsOpen)
-                        _serialPort.Close();
-                    // Ждём 1 секунду перед новой попыткой подключения
-                    if (!cancellationToken.IsCancellationRequested)
+                    try
                     {
-                        await Task.Delay(3000, cancellationToken);
+                        // После ошибки закрываем порт перед повторным подключением.
+                        if (_serialPort.IsOpen)
+                            _serialPort.Close();
+
+                        // Ждём перед повторной попыткой подключения.
+                        // Ожидание пропускается, если сервис уже остановлен.
+                        if (!cancellationToken.IsCancellationRequested)
+                        {
+                            await Task.Delay(3000, cancellationToken);
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Отмена задержки является штатным завершением работы,
+                        // а не ошибкой COM-порта.
+                        _logger.LogDebug("Ожидание повторного подключения отменено для порта {Port}", NamePort);
+                    }
+                    catch (UnauthorizedAccessException ex)
+                    {
+                        _logger.LogError(ex, "Нет доступа при закрытии порта {Port}", NamePort);
+                    }
+                    catch (IOException ex)
+                    {
+                        _logger.LogError(ex, "Ошибка ввода-вывода при закрытии порта {Port}", NamePort);
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        _logger.LogError(ex, "Некорректное состояние порта {Port} при завершении цикла", NamePort);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Защищаем метод от выхода исключения из finally,
+                        // чтобы ошибка очистки не остановила весь сервис.
+                        _logger.LogError(ex, "Ошибка завершения работы с портом {Port}", NamePort);
                     }
                 }
             }

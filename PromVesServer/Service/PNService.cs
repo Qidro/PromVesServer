@@ -21,11 +21,14 @@ namespace PromVesServer.Service
         private readonly SerialPort _serialPort;
         // Логгер для диагностики подключения, пакетов и ошибок чтения.
         private readonly ILogger<PNService> _logger;
+        //настройки калибровки PN-устройства, полученные из конфигурации приложения.
+        List<PNCalibrationSettingModel> _PNCalibrationSetting;
         // Общее хранилище состояний шести каналов PN.
         private readonly CounterStoragePNService _storageCalibration;
         private readonly CounterStorageService _storage;
 
-        public PNService(SerialPortSettingsModel settings, ILogger<PNService> logger, CounterStoragePNService storageCalibration, CounterStorageService storage)
+        public PNService(SerialPortSettingsModel settings, ILogger<PNService> logger, CounterStoragePNService storageCalibration,
+            CounterStorageService storage, List<PNCalibrationSettingModel> PNCalibrationSetting)
         {
             NamePort = settings.PortName;
             // Параметры COM-порта берутся из конфигурации приложения.
@@ -41,6 +44,7 @@ namespace PromVesServer.Service
             _logger = logger;
             _storageCalibration = storageCalibration;
             _storage = storage;
+            _PNCalibrationSetting = PNCalibrationSetting;
             // PN-контроллер передаёт ровно шесть значений.
             // Инициализируем все каналы до получения первого корректного кадра,
             // чтобы они сразу присутствовали в хранилище со статусом OFFLINE.
@@ -55,7 +59,7 @@ namespace PromVesServer.Service
         {
             // PN-протокол использует байты, поэтому кодировка консоли
             // влияет только на отображение диагностических сообщений.
-            Console.OutputEncoding = Encoding.UTF8;
+            //Console.OutputEncoding = Encoding.UTF8;
 
             // PnReceiver накапливает произвольные блоки, прочитанные из COM-порта,
             // выделяет из них кадры и проверяет их целостность.
@@ -87,6 +91,8 @@ namespace PromVesServer.Service
                 for (int i = 0; i < latest.Length; i++)
                 {
                     _storageCalibration.UpdateValue(i + 1, latest[i]);
+                    _storage.UpdateValue(i + 1, Math.Truncate(latest[i] * _PNCalibrationSetting[i].WeightCoefficient));
+                    _logger.LogDebug($"Канал {i + 1}: АЦП код={latest[i]}, вес={Math.Truncate(latest[i] * _PNCalibrationSetting[i].WeightCoefficient)}");
                 }
 
                 lastValid = timer.ElapsedMilliseconds;
@@ -195,12 +201,42 @@ namespace PromVesServer.Service
                 }
                 finally
                 {
-                    if (_serialPort.IsOpen)
-                        _serialPort.Close();
-                    // После ошибки закрываем порт и ждём перед повторным подключением.
-                    if (!cancellationToken.IsCancellationRequested)
+                    try
                     {
-                        await Task.Delay(3000, cancellationToken);
+                        // После ошибки закрываем порт перед повторным подключением.
+                        if (_serialPort.IsOpen)
+                            _serialPort.Close();
+
+                        // Ждём перед повторной попыткой подключения.
+                        // Ожидание пропускается, если сервис уже остановлен.
+                        if (!cancellationToken.IsCancellationRequested)
+                        {
+                            await Task.Delay(3000, cancellationToken);
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Отмена задержки является штатным завершением работы,
+                        // а не ошибкой COM-порта.
+                        _logger.LogDebug("Ожидание повторного подключения отменено для порта {Port}", NamePort);
+                    }
+                    catch (UnauthorizedAccessException ex)
+                    {
+                        _logger.LogError(ex, "Нет доступа при закрытии порта {Port}", NamePort);
+                    }
+                    catch (IOException ex)
+                    {
+                        _logger.LogError(ex, "Ошибка ввода-вывода при закрытии порта {Port}", NamePort);
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        _logger.LogError(ex, "Некорректное состояние порта {Port} при завершении цикла", NamePort);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Защищаем метод от выхода исключения из finally,
+                        // чтобы ошибка очистки не остановила весь сервис.
+                        _logger.LogError(ex, "Ошибка завершения работы с портом {Port}", NamePort);
                     }
                 }
         }

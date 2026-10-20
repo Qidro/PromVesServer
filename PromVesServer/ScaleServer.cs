@@ -162,15 +162,22 @@ namespace PromVesServer
                 }
                 else
                 {
-                    _logger.LogWarning("Произошла ошибка получения конфигурации протокола, причина:" + result.Message);
+                    _logger.LogError("Произошла ошибка получения конфигурации настроек ModbusTcp, причина:" + result.Message);
+                    return;
                 }
             }
             else if (resutConfig.Data.Protocol == "PN")
             {
-                //вызов метода получения конфигурации
                 var result = await _configuratorService.GetPNSettingAsync();
+                //вызов метода получения конфигурации
+                var resultСoefficientPN = await _configuratorService.GetPNCalibrationSettingAsync();
+                if (resultСoefficientPN.Success == false && resultСoefficientPN.Data == null)
+                {
+                    _logger.LogError("Произошла ошибка получения калибровочных данных для прибора PN, причина:" + resultСoefficientPN.Message);
+                    return;
+                }
                 //проверка результата
-                if (result.Success == true)
+                if (result.Success == true && result.Data != null)
                 {
                     //перебираем ports с конфигурациями com портов 
                     foreach (var settingConnectPN in result.Data)
@@ -183,24 +190,32 @@ namespace PromVesServer
                             settingConnectPN,
                             readerLogger,
                             _storagePN,
-                            _storage);
+                            _storage,
+                            resultСoefficientPN.Data
+                            );
 
                         //создание нового компонента в List
-                        //tasks.Add(
-                        //    _comPortService.ConnectMosbucTcp(stoppingToken));
+                        tasks.Add(_comPortService.ConnectPortPN(stoppingToken));
                     }
                 }
                 else
                 {
-                    _logger.LogWarning("Произошла ошибка получения конфигурации протокола, причина:" + result.Message);
+                    _logger.LogError("Произошла ошибка получения конфигурации com порта прибора PN, причина:" + result.Message);
+                    return;
                 }
+            }
+            else
+            {
+                _logger.LogError("Произошла ошибка получения конфигурации протокола, причина: неизвестный протокол");
+                return;
             }
 
             //отдельный логер для класса TcpServerService
             var readerLoggerTcpServerService = _loggerFactory.CreateLogger<TcpServerService>();
-            TcpServerService tcp = new TcpServerService(readerLoggerTcpServerService, _storage);
+            TcpServerService tcp = new TcpServerService(readerLoggerTcpServerService, _storage, _storagePN);
             //добавляем работу TCP/IP сервера в колекцию задач
             tasks.Add(tcp.StartAsync(stoppingToken));
+            tasks.Add(tcp.StartPNAsync(stoppingToken));
 
             //отдельный логер для класса FileService
             var readerLoggerFileService = _loggerFactory.CreateLogger<FileService>();

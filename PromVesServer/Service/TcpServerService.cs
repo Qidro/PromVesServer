@@ -11,14 +11,20 @@ namespace PromVesServer.Service
     {
         private readonly ILogger<TcpServerService> _logger;
         private readonly CounterStorageService _storage;
+
+        private readonly CounterStoragePNService _storageCalibration;
         private TcpListener? _listener;
-        private int Port = 5002; //порт сервера
-        public TcpServerService(ILogger<TcpServerService> logger, CounterStorageService storage)
+
+        private TcpListener? _listenerPN;
+        private int Port = 5002; //порт сервера веса
+        private int PortPN = 5003; //порт сервера кода АЦП
+        public TcpServerService(ILogger<TcpServerService> logger, CounterStorageService storage, CounterStoragePNService storageCalibration)
         { 
             _logger = logger;
             _storage = storage;
+            _storageCalibration = storageCalibration;
         }
-        //запуск сервера
+        //запуск сервера отправки данных веса на клиент
         public async Task StartAsync(CancellationToken cancellationToken)
         {
             // Получаем локальный IP
@@ -92,6 +98,70 @@ namespace PromVesServer.Service
             }
 
             throw new Exception("Локальный IPv4 адрес не найден.");
+        }
+
+        //---------------------------------------//
+        //запуск сервера отправки данных кода АЦП на клиент
+        public async Task StartPNAsync(CancellationToken cancellationToken)
+        {
+            // Получаем локальный IP
+            IPAddress ipAddress = GetLocalIPAddress();
+            _listenerPN = new TcpListener(ipAddress, PortPN);
+            //запуск сервера
+            _listenerPN.Start();
+
+            _logger.LogInformation("TCP сервер PN запущен: {ip}:{port}", ipAddress, PortPN);
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    TcpClient client = await _listenerPN.AcceptTcpClientAsync(cancellationToken);
+
+                    await HandleClientCodeACPPNAsync(client, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Ошибка TCP сервера PN");
+                }
+            }
+
+            _listener.Stop();
+
+            _logger.LogInformation("TCP сервер PN остановлен");
+        }
+        //отправка данных кода АЦП на клиент
+        private async Task HandleClientCodeACPPNAsync(TcpClient client, CancellationToken cancellationToken)
+        {
+            try
+            {
+                IPEndPoint? remote = client.Client.RemoteEndPoint as IPEndPoint;
+                NetworkStream stream = client.GetStream();
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    //формировани строки для клиента
+                    byte[] buffer = Encoding.UTF8.GetBytes(_storageCalibration.GetMessage() + "\n");
+
+                    await stream.WriteAsync(buffer, cancellationToken);
+
+                    //_logger.LogInformation("Сообщение отправлено");
+
+                    await Task.Delay(200, cancellationToken);
+                }
+
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка отправки");
+            }
+            finally
+            {
+                client.Close();
+            }
         }
     }
 }
