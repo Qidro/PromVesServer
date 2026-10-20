@@ -41,7 +41,7 @@ namespace PromVesServer
             //получаем конфигурацию табла
             var resutConfigBoard = await _configuratorService.GetBoardSettingAsync();
             //проверяем на успешность
-            if (resutConfig.Success == false)
+            if (resutConfig.Success == false && resutConfig.Data == null)
             {
                 _logger.LogError($"Произошла ошибка получения master-конфигурации, причина: {resutConfig.Message}");
                 _hostApplicationLifetime.StopApplication();

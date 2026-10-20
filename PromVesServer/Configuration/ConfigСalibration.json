@@ -1,46 +1,46 @@
 {
   "PNSetting": [
     {
-      "ChannelNumber": 3123123,
+      "ChannelNumber": 1,
       "ZeroCode": 0,
       "ReferenceCode": 0,
       "ReferenceWeight": 0,
-      "WeightCoefficient": 0
+      "WeightCoefficient": 1
     },
     {
-      "ChannelNumber": 3123123,
+      "ChannelNumber": 2,
       "ZeroCode": 32,
       "ReferenceCode": 0,
       "ReferenceWeight": 131,
-      "WeightCoefficient": 0
+      "WeightCoefficient": 1
     },
     {
-      "ChannelNumber": 12312,
+      "ChannelNumber": 3,
       "ZeroCode": 3123,
       "ReferenceCode": 3131,
       "ReferenceWeight": 0,
-      "WeightCoefficient": 0
+      "WeightCoefficient": 1
     },
     {
-      "ChannelNumber": 3213,
+      "ChannelNumber": 4,
       "ZeroCode": 0,
       "ReferenceCode": 231,
       "ReferenceWeight": 0,
-      "WeightCoefficient": 0
+      "WeightCoefficient": 1
     },
     {
-      "ChannelNumber": 312,
+      "ChannelNumber": 5,
       "ZeroCode": 231,
       "ReferenceCode": 0,
       "ReferenceWeight": 0,
-      "WeightCoefficient": 0
+      "WeightCoefficient": 1
     },
     {
-      "ChannelNumber": 312,
+      "ChannelNumber": 6,
       "ZeroCode": 0,
       "ReferenceCode": 0,
       "ReferenceWeight": 312,
-      "WeightCoefficient": 0
+      "WeightCoefficient": 1
     }
   ]
 }
