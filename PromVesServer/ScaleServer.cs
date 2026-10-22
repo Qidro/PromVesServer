@@ -171,7 +171,9 @@ namespace PromVesServer
                 var result = await _configuratorService.GetPNSettingAsync();
                 //вызов метода получения конфигурации
                 var resultСoefficientPN = await _configuratorService.GetPNCalibrationSettingAsync();
-                if (resultСoefficientPN.Success == false && resultСoefficientPN.Data == null)
+                // Останавливаем запуск PN, если загрузка завершилась ошибкой
+                // или данные калибровки отсутствуют.
+                if (!resultСoefficientPN.Success || resultСoefficientPN.Data == null)
                 {
                     _logger.LogError("Произошла ошибка получения калибровочных данных для прибора PN, причина:" + resultСoefficientPN.Message);
                     return;

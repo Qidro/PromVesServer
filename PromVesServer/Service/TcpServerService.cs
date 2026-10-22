@@ -27,35 +27,52 @@ namespace PromVesServer.Service
         //запуск сервера отправки данных веса на клиент
         public async Task StartAsync(CancellationToken cancellationToken)
         {
-            // Получаем локальный IP
-            IPAddress ipAddress = GetLocalIPAddress();
-            _listener = new TcpListener(ipAddress, Port);
-            //запуск сервера
-            _listener.Start();
-
-            _logger.LogInformation("TCP сервер запущен: {ip}:{port}", ipAddress, Port);
-
-            while (!cancellationToken.IsCancellationRequested)
+            try
             {
-                try
-                {
-                    TcpClient client = await _listener.AcceptTcpClientAsync(cancellationToken);
+                // Получаем локальный IP и запускаем сервер веса.
+                IPAddress ipAddress = GetLocalIPAddress();
+                _listener = new TcpListener(ipAddress, Port);
+                _listener.Start();
 
-                    await HandleClientAsync(client, cancellationToken);
-                }
-                catch (OperationCanceledException)
+                _logger.LogInformation("TCP сервер запущен: {ip}:{port}", ipAddress, Port);
+
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Ошибка TCP сервера");
+                    try
+                    {
+                        TcpClient client = await _listener.AcceptTcpClientAsync(cancellationToken);
+
+                        await HandleClientAsync(client, cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Ошибка TCP сервера");
+                    }
                 }
             }
-
-            _listener.Stop();
-
-            _logger.LogInformation("TCP сервер остановлен");
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("Запуск TCP-сервера веса отменён.");
+            }
+            catch (SocketException ex)
+            {
+                _logger.LogError(ex, "Не удалось запустить TCP-сервер веса на порту {Port}", Port);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка запуска TCP-сервера веса");
+            }
+            finally
+            {
+                // Останавливаем именно listener сервера веса.
+                _listener?.Stop();
+                _listener = null;
+                _logger.LogInformation("TCP сервер веса остановлен");
+            }
         }
         //отправка данных веса на клиент
         private async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
@@ -76,6 +93,12 @@ namespace PromVesServer.Service
                     await Task.Delay(200, cancellationToken);
                 }
                 
+            }
+            catch (OperationCanceledException)
+            {
+                // Отмена передачи при остановке приложения является штатной
+                // ситуацией и не должна записываться как ошибка.
+                _logger.LogDebug("Передача данных веса TCP-клиенту остановлена.");
             }
             catch (Exception ex)
             {
@@ -104,35 +127,52 @@ namespace PromVesServer.Service
         //запуск сервера отправки данных кода АЦП на клиент
         public async Task StartPNAsync(CancellationToken cancellationToken)
         {
-            // Получаем локальный IP
-            IPAddress ipAddress = GetLocalIPAddress();
-            _listenerPN = new TcpListener(ipAddress, PortPN);
-            //запуск сервера
-            _listenerPN.Start();
-
-            _logger.LogInformation("TCP сервер PN запущен: {ip}:{port}", ipAddress, PortPN);
-
-            while (!cancellationToken.IsCancellationRequested)
+            try
             {
-                try
-                {
-                    TcpClient client = await _listenerPN.AcceptTcpClientAsync(cancellationToken);
+                // Получаем локальный IP и запускаем отдельный сервер PN.
+                IPAddress ipAddress = GetLocalIPAddress();
+                _listenerPN = new TcpListener(ipAddress, PortPN);
+                _listenerPN.Start();
 
-                    await HandleClientCodeACPPNAsync(client, cancellationToken);
-                }
-                catch (OperationCanceledException)
+                _logger.LogInformation("TCP сервер PN запущен: {ip}:{port}", ipAddress, PortPN);
+
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Ошибка TCP сервера PN");
+                    try
+                    {
+                        TcpClient client = await _listenerPN.AcceptTcpClientAsync(cancellationToken);
+
+                        await HandleClientCodeACPPNAsync(client, cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Ошибка TCP сервера PN");
+                    }
                 }
             }
-
-            _listener.Stop();
-
-            _logger.LogInformation("TCP сервер PN остановлен");
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("Запуск TCP-сервера PN отменён.");
+            }
+            catch (SocketException ex)
+            {
+                _logger.LogError(ex, "Не удалось запустить TCP-сервер PN на порту {Port}", PortPN);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка запуска TCP-сервера PN");
+            }
+            finally
+            {
+                // Важно останавливать _listenerPN, а не listener сервера веса.
+                _listenerPN?.Stop();
+                _listenerPN = null;
+                _logger.LogInformation("TCP сервер PN остановлен");
+            }
         }
         //отправка данных кода АЦП на клиент
         private async Task HandleClientCodeACPPNAsync(TcpClient client, CancellationToken cancellationToken)
@@ -153,6 +193,12 @@ namespace PromVesServer.Service
                     await Task.Delay(200, cancellationToken);
                 }
 
+            }
+            catch (OperationCanceledException)
+            {
+                // Отмена передачи PN при остановке приложения является штатной
+                // ситуацией и не должна записываться как ошибка.
+                _logger.LogDebug("Передача кодов АЦП TCP-клиенту остановлена.");
             }
             catch (Exception ex)
             {

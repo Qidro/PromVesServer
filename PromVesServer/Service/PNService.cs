@@ -39,7 +39,11 @@ namespace PromVesServer.Service
                 DataBits = settings.DataBits,
                 Parity = settings.Parity,
                 StopBits = settings.StopBits,
-                Handshake = settings.Handshake
+                Handshake = settings.Handshake,
+                // Ограничиваем время блокирующего Read, чтобы сервис мог
+                // своевременно завершиться после отмены CancellationToken.
+                ReadTimeout = 1000,
+                WriteTimeout = 5000
             };
             _logger = logger;
             _storageCalibration = storageCalibration;
@@ -132,9 +136,10 @@ namespace PromVesServer.Service
                     _serialPort.Write(comman2, 0, comman2.Length);
                     Thread.Sleep(1000);
 
-                    // После открытия порта постоянно читаем входящие данные,
-                    // пока не будет отменена операция.
-                    while (true)
+                    // После открытия порта читаем входящие данные до отмены.
+                    // ReadTimeout не позволяет зависнуть на Read навсегда,
+                    // а проверка токена завершает цикл после остановки сервиса.
+                    while (!cancellationToken.IsCancellationRequested)
                     {
                         try
                         {
