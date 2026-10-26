@@ -187,7 +187,7 @@ namespace PromVesServer
                         _logger.LogDebug("Записываем данные подключения PN");
                         //создаем для каждого обьекта свой logger
                         var readerLogger = _loggerFactory.CreateLogger<PNService>();
-
+                        //вызов конструктора
                         var _comPortService = new PNService(
                             settingConnectPN,
                             readerLogger,
