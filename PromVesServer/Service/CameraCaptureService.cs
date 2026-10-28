@@ -82,12 +82,20 @@ namespace PromVesServer.Service
             for (var index = 0; index < configuration.Cameras.Count; index++)
             {
                 var camera = configuration.Cameras[index];
-                if (string.IsNullOrWhiteSpace(camera.Login) ||
+                if (camera.Id <= 0 ||
+                    string.IsNullOrWhiteSpace(camera.Login) ||
                     string.IsNullOrWhiteSpace(camera.Password) ||
                     string.IsNullOrWhiteSpace(camera.Ip))
                 {
-                    throw new InvalidDataException($"Камера с индексом {index} содержит пустые параметры подключения");
+                    throw new InvalidDataException($"Камера с индексом {index} содержит некорректный id или пустые параметры подключения");
                 }
+            }
+
+            if (configuration.Cameras
+                .GroupBy(camera => camera.Id)
+                .Any(group => group.Count() > 1))
+            {
+                throw new InvalidDataException("Идентификаторы камер должны быть уникальными");
             }
 
             return configuration;
@@ -96,12 +104,12 @@ namespace PromVesServer.Service
         // Подключается к камере и непрерывно сохраняет её кадры до остановки службы.
         public async Task CaptureCameraAsync(
             CameraSettingsModel camera,
-            int cameraNumber,
+            int cameraId,
             CancellationToken stoppingToken)
         {
-            // У каждой камеры свой каталог: Camera1, Camera2 и так далее.
-            // Номер соответствует позиции камеры в массиве cameras.
-            var cameraPath = Path.Combine(_imagesPath, $"Camera{cameraNumber}");
+            // У каждой камеры свой каталог: Camera{id}. Идентификатор берётся
+            // из ConfigCameras.json и не зависит от позиции в массиве cameras.
+            var cameraPath = Path.Combine(_imagesPath, $"Camera{cameraId}");
             Directory.CreateDirectory(cameraPath);
 
             while (!stoppingToken.IsCancellationRequested)
@@ -115,13 +123,13 @@ namespace PromVesServer.Service
                     {
                         // Камера может быть временно недоступна или ещё не успеть загрузиться.
                         // Повторное подключение выполняется без завершения всей службы.
-                        _logger.LogWarning("Не удалось подключиться к камере {CameraNumber} ({Ip}). Повтор через 5 секунд", cameraNumber, camera.Ip);
+                        _logger.LogWarning("Не удалось подключиться к камере {CameraId} ({Ip}). Повтор через 5 секунд", cameraId, camera.Ip);
                         await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
                         continue;
                     }
 
-                    _logger.LogInformation("Подключение к камере {CameraNumber} ({Ip}) установлено", cameraNumber, camera.Ip);
-                    await CaptureFramesAsync(capture, cameraPath, cameraNumber, stoppingToken);
+                    _logger.LogInformation("Подключение к камере {CameraId} ({Ip}) установлено", cameraId, camera.Ip);
+                    await CaptureFramesAsync(capture, cameraPath, cameraId, stoppingToken);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
@@ -130,7 +138,7 @@ namespace PromVesServer.Service
                 catch (Exception ex)
                 {
                     // После сетевой ошибки соединение будет пересоздано на следующей итерации.
-                    _logger.LogError(ex, "Ошибка захвата кадров с камеры {CameraNumber}. Повтор через 5 секунд", cameraNumber);
+                    _logger.LogError(ex, "Ошибка захвата кадров с камеры {CameraId}. Повтор через 5 секунд", cameraId);
                     await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
                 }
             }
@@ -140,12 +148,12 @@ namespace PromVesServer.Service
         // Ошибка очистки не завершает задачу: следующая попытка будет выполнена
         // после короткой задержки, чтобы каталог не перестал очищаться навсегда.
         public async Task CleanupOldPhotosAsync(
-            int cameraNumber,
+            int cameraId,
             CancellationToken stoppingToken)
         {
             // Каталог камеры совпадает с каталогом, который используется
             // CaptureCameraAsync. Поэтому очистка удаляет только файлы своей камеры.
-            var cameraPath = Path.Combine(_imagesPath, $"Camera{cameraNumber}");
+            var cameraPath = Path.Combine(_imagesPath, $"Camera{cameraId}");
 
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -179,16 +187,16 @@ namespace PromVesServer.Service
                                 // Файл может одновременно записываться OpenCV.
                                 // Пропускаем его и продолжаем удаление остальных файлов.
                                 _logger.LogWarning(ex,
-                                    "Не удалось удалить фотографию {FilePath} камеры {CameraNumber}",
+                                    "Не удалось удалить фотографию {FilePath} камеры {CameraId}",
                                     filePath,
-                                    cameraNumber);
+                                    cameraId);
                             }
                             catch (UnauthorizedAccessException ex)
                             {
                                 _logger.LogWarning(ex,
-                                    "Нет доступа к фотографии {FilePath} камеры {CameraNumber}",
+                                    "Нет доступа к фотографии {FilePath} камеры {CameraId}",
                                     filePath,
-                                    cameraNumber);
+                                    cameraId);
                             }
                         }
                     }
@@ -196,8 +204,8 @@ namespace PromVesServer.Service
                     // проверить работу очистки при включённом подробном логировании.
 
                     _logger.LogDebug(
-                        "Очистка камеры {CameraNumber} завершена. Удалено файлов: {DeletedFiles}",
-                        cameraNumber,
+                        "Очистка камеры {CameraId} завершена. Удалено файлов: {DeletedFiles}",
+                        cameraId,
                         deletedFiles);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -209,8 +217,8 @@ namespace PromVesServer.Service
                     // Ошибка доступа к каталогу или перечисления файлов не должна
                     // остановить очистку на весь срок работы приложения.
                     _logger.LogError(ex,
-                        "Ошибка очистки фотографий камеры {CameraNumber}. Повторная попытка через 30 секунд",
-                        cameraNumber);
+                        "Ошибка очистки фотографий камеры {CameraId}. Повторная попытка через 30 секунд",
+                        cameraId);
 
                     try
                     {
@@ -231,7 +239,7 @@ namespace PromVesServer.Service
         private async Task CaptureFramesAsync(
             VideoCapture capture,
             string cameraPath,
-            int cameraNumber,
+            int cameraId,
             CancellationToken stoppingToken)
         {
             // Mat хранит текущий кадр в нативной памяти OpenCV и должен быть освобождён.
@@ -246,7 +254,7 @@ namespace PromVesServer.Service
                 // RTSP-буфер накопит старые кадры и изображение начнёт отставать.
                 if (!capture.Read(frame) || frame.Empty())
                 {
-                    _logger.LogWarning("Камера {CameraNumber} не вернула кадр", cameraNumber);
+                    _logger.LogWarning("Камера {CameraId} не вернула кадр", cameraId);
                     await Task.Delay(10, stoppingToken);
                 }
                 else if (Stopwatch.GetTimestamp() >= nextSaveTime)
@@ -258,7 +266,7 @@ namespace PromVesServer.Service
                     var filePath = Path.Combine(cameraPath, fileName);
                     if (!Cv2.ImWrite(filePath, frame))
                     {
-                        _logger.LogWarning("Не удалось сохранить кадр камеры {CameraNumber}: {FilePath}", cameraNumber, filePath);
+                        _logger.LogWarning("Не удалось сохранить кадр камеры {CameraId}: {FilePath}", cameraId, filePath);
                     }
 
                     // Сохраняем один кадр раз в 250 мс, но до этого момента продолжаем

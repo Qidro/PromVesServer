@@ -231,14 +231,13 @@ namespace PromVesServer
                 _logger.LogInformation("Конфигурация камер успешно загружена");
                 // Для каждой камеры добавляем отдельную фоновую задачу в общий список.
                 // Task.WhenAll в конце ExecuteAsync будет ждать и задачи камер тоже.
-                foreach (var camera in camerasConfigResult.Data.Cameras.Select((value, index) => new { value, index }))
+                foreach (var camera in camerasConfigResult.Data.Cameras)
                 {
-                    var cameraNumber = camera.index + 1;
-                    _logger.LogInformation("Запуск камеры {CameraNumber}", cameraNumber);
+                    _logger.LogInformation("Запуск камеры {CameraId}", camera.Id);
                     tasks.Add(Task.Run(
                          () => _cameraCaptureService.CaptureCameraAsync(
-                        camera.value,
-                         cameraNumber,
+                         camera,
+                         camera.Id,
                         stoppingToken),
                          stoppingToken));
 
@@ -248,7 +247,7 @@ namespace PromVesServer
                     // при штатной остановке приложения.
                     tasks.Add(Task.Run(
                         () => _cameraCaptureService.CleanupOldPhotosAsync(
-                            cameraNumber,
+                            camera.Id,
                             stoppingToken),
                         stoppingToken));
                 }
