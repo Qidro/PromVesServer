@@ -128,7 +128,7 @@ namespace PromVesServer.Service
                 }
             }
         }
-
+        //захват потока камеры
         private async Task CaptureFramesAsync(
             VideoCapture capture,
             string cameraPath,
@@ -138,17 +138,19 @@ namespace PromVesServer.Service
             // Mat хранит текущий кадр в нативной памяти OpenCV и должен быть освобождён.
             using var frame = new Mat();
             long frameNumber = 0;
+            var nextSaveTime = Stopwatch.GetTimestamp();
+            var saveIntervalTicks = Stopwatch.Frequency * CaptureIntervalMilliseconds / 1000;
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                // Время захвата и записи вычитается из интервала, чтобы частота
-                // оставалась максимально близкой к 4 кадрам в секунду.
-                var stopwatch = Stopwatch.StartNew();
+                // Кадр нужно читать постоянно. Если читать поток только раз в 250 мс,
+                // RTSP-буфер накопит старые кадры и изображение начнёт отставать.
                 if (!capture.Read(frame) || frame.Empty())
                 {
                     _logger.LogWarning("Камера {CameraNumber} не вернула кадр", cameraNumber);
+                    await Task.Delay(10, stoppingToken);
                 }
-                else
+                else if (Stopwatch.GetTimestamp() >= nextSaveTime)
                 {
                     // В имени есть UTC-время и порядковый номер. Порядковый номер
                     // предотвращает совпадение имён при сохранении нескольких кадров
@@ -159,15 +161,10 @@ namespace PromVesServer.Service
                     {
                         _logger.LogWarning("Не удалось сохранить кадр камеры {CameraNumber}: {FilePath}", cameraNumber, filePath);
                     }
-                }
 
-                stopwatch.Stop();
-                var remainingMilliseconds = CaptureIntervalMilliseconds - stopwatch.ElapsedMilliseconds;
-                if (remainingMilliseconds > 0)
-                {
-                    // Если кадр обрабатывался дольше 250 мс, задержка не добавляется,
-                    // иначе служба ждёт только оставшееся время интервала.
-                    await Task.Delay(TimeSpan.FromMilliseconds(remainingMilliseconds), stoppingToken);
+                    // Сохраняем один кадр раз в 250 мс, но до этого момента продолжаем
+                    // читать поток, поэтому сохраняемый кадр остаётся свежим.
+                    nextSaveTime = Stopwatch.GetTimestamp() + saveIntervalTicks;
                 }
             }
         }

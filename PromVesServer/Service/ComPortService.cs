@@ -159,7 +159,7 @@ namespace PromVesServer.Service
                                 continue;
                             }
 
-                            _logger.LogInformation(
+                            _logger.LogDebug(
                                 "Получил сообщение {Port}: {Value}",
                                 NamePort,
                                 value);

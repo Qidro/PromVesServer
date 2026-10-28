@@ -233,13 +233,15 @@ namespace PromVesServer
                 // Task.WhenAll в конце ExecuteAsync будет ждать и задачи камер тоже.
                 foreach (var camera in camerasConfigResult.Data.Cameras.Select((value, index) => new { value, index }))
                 {
-                    tasks.Add(_cameraCaptureService.CaptureCameraAsync(
+                    _logger.LogInformation($"Запуск камеры {camera.index}");
+                    tasks.Add(Task.Run(
+                         () => _cameraCaptureService.CaptureCameraAsync(
                         camera.value,
                         camera.index + 1,
-                        stoppingToken));
+                        stoppingToken),
+                         stoppingToken));
                 }
 
-                _logger.LogInformation("Запущены задачи захвата изображений с камер");
             }
             
 
