@@ -39,26 +39,6 @@
       "StopBits": "One",
       "Handshake": "None",
       "slaveAddress": 3
-    },
-    {
-      "Id": 5,
-      "PortName": "COM25",
-      "BaudRate": 115200,
-      "DataBits": 8,
-      "Parity": "None",
-      "StopBits": "One",
-      "Handshake": "None",
-      "slaveAddress": 3
-    },
-    {
-      "Id": 6,
-      "PortName": "COM26",
-      "BaudRate": 115200,
-      "DataBits": 8,
-      "Parity": "None",
-      "StopBits": "One",
-      "Handshake": "None",
-      "slaveAddress": 3
     }
   ]
 }

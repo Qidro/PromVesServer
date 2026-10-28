@@ -42,6 +42,7 @@ try
             reloadOnChange: true);
 
     builder.Services.AddHostedService<ScaleServer>();
+    builder.Services.AddSingleton<CameraCaptureService>();
     builder.Services.AddSingleton<ConfiguratorService>();
     builder.Services.AddSingleton<CounterStorageService>();
     builder.Services.AddSingleton<CounterStoragePNService>();

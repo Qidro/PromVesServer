@@ -14,11 +14,13 @@ namespace PromVesServer
         //
         private readonly CounterStoragePNService _storagePN;
         private readonly ConfiguratorService _configuratorService;
+        private readonly CameraCaptureService _cameraCaptureService;
         private readonly IHostApplicationLifetime _hostApplicationLifetime;
         //конфигурацич modbus
         //private readonly ModbusTcpService _modbusTcpService;
         public ScaleServer(IConfiguration configuration, ILogger<ScaleServer> logger, ILoggerFactory loggerFactory, 
-            CounterStorageService storage, CounterStoragePNService storagePN, ConfiguratorService configuratorService, IHostApplicationLifetime hostApplicationLifetime)
+            CounterStorageService storage, CounterStoragePNService storagePN, ConfiguratorService configuratorService,
+            CameraCaptureService cameraCaptureService, IHostApplicationLifetime hostApplicationLifetime)
         {
             _configuration = configuration;
             _logger = logger;
@@ -26,6 +28,7 @@ namespace PromVesServer
             _storage = storage;
             _storagePN = storagePN;
             _configuratorService = configuratorService;
+            _cameraCaptureService = cameraCaptureService;
             _hostApplicationLifetime = hostApplicationLifetime;
         }
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -163,6 +166,7 @@ namespace PromVesServer
                 else
                 {
                     _logger.LogError("Произошла ошибка получения конфигурации настроек ModbusTcp, причина:" + result.Message);
+                    _hostApplicationLifetime.StopApplication();
                     return;
                 }
             }
@@ -176,6 +180,7 @@ namespace PromVesServer
                 if (!resultСoefficientPN.Success || resultСoefficientPN.Data == null)
                 {
                     _logger.LogError("Произошла ошибка получения калибровочных данных для прибора PN, причина:" + resultСoefficientPN.Message);
+                    _hostApplicationLifetime.StopApplication();
                     return;
                 }
                 //проверка результата
@@ -203,14 +208,41 @@ namespace PromVesServer
                 else
                 {
                     _logger.LogError("Произошла ошибка получения конфигурации com порта прибора PN, причина:" + result.Message);
+                    _hostApplicationLifetime.StopApplication();
                     return;
                 }
             }
             else
             {
                 _logger.LogError("Произошла ошибка получения конфигурации протокола, причина: неизвестный протокол");
+                _hostApplicationLifetime.StopApplication();
                 return;
             }
+            // Загружаем и проверяем конфигурацию камер.
+            // Задачи подключения создаются только после успешного результата.
+            var camerasConfigResult = await _cameraCaptureService.GetConfigurationAsync(stoppingToken);
+            if (!camerasConfigResult.Success || camerasConfigResult.Data == null)
+            {
+                _logger.LogError("Произошла ошибка получения конфигурации камер, причина: {Message}", camerasConfigResult.Message);
+                _hostApplicationLifetime.StopApplication();
+            }
+            else
+            {
+                _logger.LogInformation("Конфигурация камер успешно загружена");
+                // Для каждой камеры добавляем отдельную фоновую задачу в общий список.
+                // Task.WhenAll в конце ExecuteAsync будет ждать и задачи камер тоже.
+                foreach (var camera in camerasConfigResult.Data.Cameras.Select((value, index) => new { value, index }))
+                {
+                    tasks.Add(_cameraCaptureService.CaptureCameraAsync(
+                        camera.value,
+                        camera.index + 1,
+                        stoppingToken));
+                }
+
+                _logger.LogInformation("Запущены задачи захвата изображений с камер");
+            }
+            
+
 
             //отдельный логер для класса TcpServerService
             var readerLoggerTcpServerService = _loggerFactory.CreateLogger<TcpServerService>();

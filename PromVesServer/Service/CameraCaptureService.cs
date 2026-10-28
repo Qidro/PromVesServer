@@ -1,0 +1,175 @@
+using OpenCvSharp;
+using PromVesServer.Models;
+using System.Diagnostics;
+using System.Text.Json;
+
+namespace PromVesServer.Service
+{
+    // Сервис загружает конфигурацию камер и выполняет захват кадров.
+    // Запуск задач этого сервиса выполняется из ScaleServer.ExecuteAsync.
+    public class CameraCaptureService
+    {
+        // 250 мс между кадрами соответствуют частоте 4 кадра в секунду.
+        private const int CaptureIntervalMilliseconds = 250;
+        private readonly ILogger<CameraCaptureService> _logger;
+        // Пути строятся относительно каталога приложения, чтобы служба одинаково
+        // работала из Visual Studio, при публикации и в виде Windows Service.
+        private readonly string _configurationPath;
+        private readonly string _imagesPath;
+
+        public CameraCaptureService(
+            ILogger<CameraCaptureService> logger)
+        {
+            _logger = logger;
+            _configurationPath = Path.Combine(
+                AppContext.BaseDirectory,
+                "Configuration",
+                "ConfigCameras.json");
+            _imagesPath = Path.Combine(AppContext.BaseDirectory, "cameraPhoto");
+        }
+
+        // Загружает и проверяет настройки до создания задач подключения к камерам.
+        public async Task<ServiceResult<CamerasConfigurationModel>> GetConfigurationAsync(CancellationToken stoppingToken)
+        {
+            try
+            {
+                // Служба не начинает подключение к камерам, пока конфигурация
+                // не будет прочитана и проверена целиком.
+                var configuration = await LoadConfigurationAsync(stoppingToken);
+                if (configuration.Cameras.Count == 0)
+                {
+                    return ServiceResult<CamerasConfigurationModel>.Fail(
+                        "Конфигурация камер не содержит ни одной камеры");
+                }
+
+                return ServiceResult<CamerasConfigurationModel>.Ok(configuration);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException)
+            {
+                _logger.LogError(ex, "Не удалось загрузить конфигурацию камер из {ConfigurationPath}", _configurationPath);
+                return ServiceResult<CamerasConfigurationModel>.Fail(ex.Message);
+            }
+        }
+
+        private async Task<CamerasConfigurationModel> LoadConfigurationAsync(CancellationToken stoppingToken)
+        {
+            // Файл должен быть скопирован в Configuration рядом с exe-файлом
+            // настройкой CopyToOutputDirectory в файле проекта.
+            if (!File.Exists(_configurationPath))
+            {
+                throw new FileNotFoundException("Файл конфигурации камер не найден", _configurationPath);
+            }
+
+            await using var stream = File.OpenRead(_configurationPath);
+            // JsonPropertyName в модели связывает секцию "cameras" и свойства
+            // "login", "password", "ip" из ConfigCameras.json с объектом C#.
+            var configuration = await JsonSerializer.DeserializeAsync<CamerasConfigurationModel>(stream, cancellationToken: stoppingToken);
+
+            if (configuration?.Cameras == null)
+            {
+                throw new InvalidDataException("В конфигурации отсутствует секция cameras");
+            }
+
+            // Проверяем все камеры заранее, чтобы ошибка в одной записи не привела
+            // к запуску службы с частично рабочей конфигурацией.
+            for (var index = 0; index < configuration.Cameras.Count; index++)
+            {
+                var camera = configuration.Cameras[index];
+                if (string.IsNullOrWhiteSpace(camera.Login) ||
+                    string.IsNullOrWhiteSpace(camera.Password) ||
+                    string.IsNullOrWhiteSpace(camera.Ip))
+                {
+                    throw new InvalidDataException($"Камера с индексом {index} содержит пустые параметры подключения");
+                }
+            }
+
+            return configuration;
+        }
+
+        // Подключается к камере и непрерывно сохраняет её кадры до остановки службы.
+        public async Task CaptureCameraAsync(
+            CameraSettingsModel camera,
+            int cameraNumber,
+            CancellationToken stoppingToken)
+        {
+            // У каждой камеры свой каталог: Camera1, Camera2 и так далее.
+            // Номер соответствует позиции камеры в массиве cameras.
+            var cameraPath = Path.Combine(_imagesPath, $"Camera{cameraNumber}");
+            Directory.CreateDirectory(cameraPath);
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    // VideoCapture использует FFmpeg внутри OpenCvSharp для декодирования
+                    // RTSP-потока. using гарантирует освобождение нативных ресурсов.
+                    using var capture = new VideoCapture(camera.GetRtspUrl(), VideoCaptureAPIs.FFMPEG);
+                    if (!capture.IsOpened())
+                    {
+                        // Камера может быть временно недоступна или ещё не успеть загрузиться.
+                        // Повторное подключение выполняется без завершения всей службы.
+                        _logger.LogWarning("Не удалось подключиться к камере {CameraNumber} ({Ip}). Повтор через 5 секунд", cameraNumber, camera.Ip);
+                        await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                        continue;
+                    }
+
+                    _logger.LogInformation("Подключение к камере {CameraNumber} ({Ip}) установлено", cameraNumber, camera.Ip);
+                    await CaptureFramesAsync(capture, cameraPath, cameraNumber, stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    // После сетевой ошибки соединение будет пересоздано на следующей итерации.
+                    _logger.LogError(ex, "Ошибка захвата кадров с камеры {CameraNumber}. Повтор через 5 секунд", cameraNumber);
+                    await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                }
+            }
+        }
+
+        private async Task CaptureFramesAsync(
+            VideoCapture capture,
+            string cameraPath,
+            int cameraNumber,
+            CancellationToken stoppingToken)
+        {
+            // Mat хранит текущий кадр в нативной памяти OpenCV и должен быть освобождён.
+            using var frame = new Mat();
+            long frameNumber = 0;
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                // Время захвата и записи вычитается из интервала, чтобы частота
+                // оставалась максимально близкой к 4 кадрам в секунду.
+                var stopwatch = Stopwatch.StartNew();
+                if (!capture.Read(frame) || frame.Empty())
+                {
+                    _logger.LogWarning("Камера {CameraNumber} не вернула кадр", cameraNumber);
+                }
+                else
+                {
+                    // В имени есть UTC-время и порядковый номер. Порядковый номер
+                    // предотвращает совпадение имён при сохранении нескольких кадров
+                    // в одну миллисекунду.
+                    var fileName = $"{DateTime.UtcNow:yyyyMMdd_HHmmss_fff}_{frameNumber++:D8}.jpg";
+                    var filePath = Path.Combine(cameraPath, fileName);
+                    if (!Cv2.ImWrite(filePath, frame))
+                    {
+                        _logger.LogWarning("Не удалось сохранить кадр камеры {CameraNumber}: {FilePath}", cameraNumber, filePath);
+                    }
+                }
+
+                stopwatch.Stop();
+                var remainingMilliseconds = CaptureIntervalMilliseconds - stopwatch.ElapsedMilliseconds;
+                if (remainingMilliseconds > 0)
+                {
+                    // Если кадр обрабатывался дольше 250 мс, задержка не добавляется,
+                    // иначе служба ждёт только оставшееся время интервала.
+                    await Task.Delay(TimeSpan.FromMilliseconds(remainingMilliseconds), stoppingToken);
+                }
+            }
+        }
+    }
+}
