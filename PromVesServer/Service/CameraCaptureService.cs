@@ -11,6 +11,13 @@ namespace PromVesServer.Service
     {
         // 250 мс между кадрами соответствуют частоте 4 кадра в секунду.
         private const int CaptureIntervalMilliseconds = 250;
+        // Интервал задаётся отдельно от интервала захвата, потому что очистка
+        // не должна замедлять получение и сохранение кадров.
+        // Первая проверка выполняется через 3 минуты после запуска задачи.
+        private const int CleanupIntervalMinutes = 3;
+        // Файл считается старым, если его время последнего изменения меньше,
+        // чем текущее UTC-время минус 2 минуты.
+        private static readonly TimeSpan PhotoLifetime = TimeSpan.FromMinutes(2);
         private readonly ILogger<CameraCaptureService> _logger;
         // Пути строятся относительно каталога приложения, чтобы служба одинаково
         // работала из Visual Studio, при публикации и в виде Windows Service.
@@ -128,6 +135,98 @@ namespace PromVesServer.Service
                 }
             }
         }
+
+        // Периодически удаляет старые фотографии конкретной камеры.
+        // Ошибка очистки не завершает задачу: следующая попытка будет выполнена
+        // после короткой задержки, чтобы каталог не перестал очищаться навсегда.
+        public async Task CleanupOldPhotosAsync(
+            int cameraNumber,
+            CancellationToken stoppingToken)
+        {
+            // Каталог камеры совпадает с каталогом, который используется
+            // CaptureCameraAsync. Поэтому очистка удаляет только файлы своей камеры.
+            var cameraPath = Path.Combine(_imagesPath, $"Camera{cameraNumber}");
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    // Длительная задержка не блокирует поток: задача освобождает поток
+                    // до момента следующего запуска очистки.
+                    await Task.Delay(TimeSpan.FromMinutes(CleanupIntervalMinutes), stoppingToken);
+
+                    var expirationTime = DateTime.UtcNow - PhotoLifetime;
+                    var deletedFiles = 0;
+
+                    if (Directory.Exists(cameraPath))
+                    {
+                        // Перебираем только JPG, так как служба сохраняет фотографии
+                        // именно в этом формате. Другие файлы каталога не затрагиваются.
+                        foreach (var filePath in Directory.EnumerateFiles(cameraPath, "*.jpg"))
+                        {
+                            try
+                            {
+                                // Используем время последнего изменения файла в UTC,
+                                // чтобы сравнение не зависело от часового пояса сервера.
+                                if (File.GetLastWriteTimeUtc(filePath) < expirationTime)
+                                {
+                                    File.Delete(filePath);
+                                    deletedFiles++;
+                                }
+                            }
+                            catch (IOException ex)
+                            {
+                                // Файл может одновременно записываться OpenCV.
+                                // Пропускаем его и продолжаем удаление остальных файлов.
+                                _logger.LogWarning(ex,
+                                    "Не удалось удалить фотографию {FilePath} камеры {CameraNumber}",
+                                    filePath,
+                                    cameraNumber);
+                            }
+                            catch (UnauthorizedAccessException ex)
+                            {
+                                _logger.LogWarning(ex,
+                                    "Нет доступа к фотографии {FilePath} камеры {CameraNumber}",
+                                    filePath,
+                                    cameraNumber);
+                            }
+                        }
+                    }
+                    // Лог Debug не заполняет обычный информационный лог, но позволяет
+                    // проверить работу очистки при включённом подробном логировании.
+
+                    _logger.LogDebug(
+                        "Очистка камеры {CameraNumber} завершена. Удалено файлов: {DeletedFiles}",
+                        cameraNumber,
+                        deletedFiles);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    // Ошибка доступа к каталогу или перечисления файлов не должна
+                    // остановить очистку на весь срок работы приложения.
+                    _logger.LogError(ex,
+                        "Ошибка очистки фотографий камеры {CameraNumber}. Повторная попытка через 30 секунд",
+                        cameraNumber);
+
+                    try
+                    {
+                        // Повторяем раньше стандартного интервала, чтобы временная
+                        // ошибка доступа не оставила накопившиеся файлы до следующего
+                        // трёхминутного цикла.
+                        await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    }
+                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                }
+            }
+        }
+
         //захват потока камеры
         private async Task CaptureFramesAsync(
             VideoCapture capture,

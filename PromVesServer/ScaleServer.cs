@@ -233,13 +233,24 @@ namespace PromVesServer
                 // Task.WhenAll в конце ExecuteAsync будет ждать и задачи камер тоже.
                 foreach (var camera in camerasConfigResult.Data.Cameras.Select((value, index) => new { value, index }))
                 {
-                    _logger.LogInformation($"Запуск камеры {camera.index}");
+                    var cameraNumber = camera.index + 1;
+                    _logger.LogInformation("Запуск камеры {CameraNumber}", cameraNumber);
                     tasks.Add(Task.Run(
                          () => _cameraCaptureService.CaptureCameraAsync(
                         camera.value,
-                        camera.index + 1,
+                         cameraNumber,
                         stoppingToken),
                          stoppingToken));
+
+                    // Очистка запускается отдельно от захвата. Даже если камера
+                    // временно недоступна, её каталог продолжит очищаться.
+                    // Обе задачи получают один stoppingToken и завершаются вместе
+                    // при штатной остановке приложения.
+                    tasks.Add(Task.Run(
+                        () => _cameraCaptureService.CleanupOldPhotosAsync(
+                            cameraNumber,
+                            stoppingToken),
+                        stoppingToken));
                 }
 
             }
