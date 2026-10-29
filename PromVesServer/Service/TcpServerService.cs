@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -7,7 +8,8 @@ using PromVesServer.Models;
 
 namespace PromVesServer.Service
 {
-    //Сервис предназначен для создания TCP сервера и отправки клиентам данных по взвешиванию
+    //Сервис предназначен для создания TCP серверов: отправка веса (5002),
+    //кода АЦП (5003) и обработка команд видеозаписи (5005)
     public class TcpServerService
     {
         private readonly ILogger<TcpServerService> _logger;
@@ -19,8 +21,10 @@ namespace PromVesServer.Service
         private TcpListener? _listener;
 
         private TcpListener? _listenerPN;
+        private TcpListener? _listenerVideo;
         private int Port = 5002; //порт сервера веса
         private int PortPN = 5003; //порт сервера кода АЦП
+        private int PortVideo = 5005; //порт сервера команд видеозаписи
         public TcpServerService(
             ILogger<TcpServerService> logger,
             CounterStorageService storage,
@@ -89,8 +93,6 @@ namespace PromVesServer.Service
             {
                 IPEndPoint? remote = client.Client.RemoteEndPoint as IPEndPoint;
                 NetworkStream stream = client.GetStream();
-                // Приём команд выполняется параллельно с отправкой данных веса.
-                _ = ReceiveClientMessagesAsync(stream, cancellationToken);
 
                 while (!cancellationToken.IsCancellationRequested)
                 {
@@ -121,19 +123,63 @@ namespace PromVesServer.Service
             }
         }
 
-        // Читает команды клиента построчно, не блокируя отправку данных веса.
-        private async Task ReceiveClientMessagesAsync(
-            NetworkStream stream,
-            CancellationToken cancellationToken)
+        //---------------------------------------//
+        // запуск сервера команд видеозаписи: StartCapture, EndCapture
+        public async Task StartVideoAsync(CancellationToken cancellationToken)
         {
             try
             {
-                using var reader = new StreamReader(
-                    stream,
-                    Encoding.UTF8,
-                    detectEncodingFromByteOrderMarks: false,
-                    bufferSize: 1024,
-                    leaveOpen: true);
+                IPAddress ipAddress = GetLocalIPAddress();
+                _listenerVideo = new TcpListener(ipAddress, PortVideo);
+                _listenerVideo.Start();
+
+                _logger.LogInformation("TCP сервер команд видеозаписи запущен: {ip}:{port}", ipAddress, PortVideo);
+
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    try
+                    {
+                        TcpClient client = await _listenerVideo.AcceptTcpClientAsync(cancellationToken);
+
+                        await HandleClientVideoAsync(client, cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Ошибка TCP сервера команд видеозаписи");
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("Запуск TCP-сервера команд видеозаписи отменён.");
+            }
+            catch (SocketException ex)
+            {
+                _logger.LogError(ex, "Не удалось запустить TCP-сервер команд видеозаписи на порту {Port}", PortVideo);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка запуска TCP-сервера команд видеозаписи");
+            }
+            finally
+            {
+                _listenerVideo?.Stop();
+                _listenerVideo = null;
+                _logger.LogInformation("TCP сервер команд видеозаписи остановлен");
+            }
+        }
+
+        // приём команд клиента, в ответ на StartCapture отправляется имя файла
+        private async Task HandleClientVideoAsync(TcpClient client, CancellationToken cancellationToken)
+        {
+            try
+            {
+                NetworkStream stream = client.GetStream();
+                using var reader = new StreamReader(stream, Encoding.UTF8, false, 1024, leaveOpen: true);
 
                 while (!cancellationToken.IsCancellationRequested)
                 {
@@ -143,36 +189,82 @@ namespace PromVesServer.Service
                         return;
                     }
 
-                    HandleClientMessage(message);
+                    var command = message.Trim();
+                    if (string.Equals(command, "StartCapture", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // singleton, поэтому изменение сразу видно CameraCaptureService
+                        _cameraStatusVideo.CameraRun = true;
+                        // сбрасываем имя прошлой записи, чтобы не отправить устаревшее
+                        _cameraStatusVideo.CurrentVideoFileName = null;
+
+                        _logger.LogInformation("Получена команда StartCapture. Запись камеры разрешена");
+
+                        await SendVideoFileNameOnceAsync(stream, cancellationToken);
+                    }
+                    else if (string.Equals(command, "EndCapture", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _cameraStatusVideo.CameraRun = false;
+                        _logger.LogInformation("Получена команда EndCapture. Запись камеры остановлена");
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Неизвестная команда видеозаписи: {Command}", command);
+                    }
                 }
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
-                // Отмена чтения при остановке приложения является штатной.
+                // отмена при остановке приложения — штатная ситуация
+                _logger.LogDebug("Передача команд видеозаписи остановлена.");
             }
             catch (IOException ex)
             {
-                _logger.LogDebug(ex, "TCP-клиент завершил соединение во время отправки команды");
+                _logger.LogDebug(ex, "Линия клиента команд видеозаписи разорвана");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка обработки команд видеозаписи");
+            }
+            finally
+            {
+                client.Close();
             }
         }
 
-        // Обрабатывает команды, полученные от клиента TCP-сервера веса.
-        private void HandleClientMessage(string message)
+        // ждёт начала записи и отправляет имя файла один раз
+        private async Task SendVideoFileNameOnceAsync(
+            NetworkStream stream,
+            CancellationToken cancellationToken)
         {
-            var command = message.Trim();
-            if (string.Equals(command, "StartCapture", StringComparison.OrdinalIgnoreCase))
+            // имя появится после подключения камеры, ждём максимум 30 секунд
+            var maxWaitTime = TimeSpan.FromSeconds(30);
+            var waitStarted = Stopwatch.StartNew();
+
+            while (string.IsNullOrEmpty(_cameraStatusVideo.CurrentVideoFileName) &&
+                   _cameraStatusVideo.CameraRun &&
+                   waitStarted.Elapsed < maxWaitTime)
             {
-                // CameraStatusVideo зарегистрирован singleton, поэтому это изменение
-                // сразу видно CameraCaptureService и другим классам приложения.
-                _cameraStatusVideo.CameraRun = true;
-                _logger.LogInformation("Получена команда StartCapture. Запись камеры разрешена");
+                await Task.Delay(100, cancellationToken);
             }
-            else if (string.Equals(command, "EndCapture", StringComparison.OrdinalIgnoreCase))
-            { 
-                _cameraStatusVideo.CameraRun = false;
-                _logger.LogInformation("Получена команда EndCapture. Запись камеры остановлена");
+
+            var videoFileName = _cameraStatusVideo.CurrentVideoFileName;
+            if (string.IsNullOrEmpty(videoFileName))
+            {
+                // камера не начала запись — повтор возможен только по новому StartCapture
+                _logger.LogWarning("Имя файла записи не получено за {Seconds} секунд", maxWaitTime.TotalSeconds);
+                return;
             }
+
+            // префикс отличает ответ от прочих протоколов
+            byte[] videoBuffer = Encoding.UTF8.GetBytes("VideoFile:" + videoFileName + "\n");
+            await stream.WriteAsync(videoBuffer, cancellationToken);
+
+            // обнуляем сразу после отправки — имя уходит только один раз
+            _cameraStatusVideo.CurrentVideoFileName = null;
+
+            _logger.LogInformation("Клиенту отправлено имя файла записи: {FileName}", videoFileName);
         }
+
         //получение IP
         private static IPAddress GetLocalIPAddress()
         {

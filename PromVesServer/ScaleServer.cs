@@ -292,6 +292,8 @@ namespace PromVesServer
             //добавляем работу TCP/IP сервера в колекцию задач
             tasks.Add(tcp.StartAsync(stoppingToken));
             tasks.Add(tcp.StartPNAsync(stoppingToken));
+            //сервер команд видеозаписи на порту 5005
+            tasks.Add(tcp.StartVideoAsync(stoppingToken));
 
             //отдельный логер для класса FileService
             var readerLoggerFileService = _loggerFactory.CreateLogger<FileService>();

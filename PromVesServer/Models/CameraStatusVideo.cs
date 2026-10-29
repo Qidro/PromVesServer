@@ -8,5 +8,8 @@ namespace PromVesServer.Models
     public class CameraStatusVideo
     {
         public bool CameraRun { get; set; }
+
+        // Имя mp4-файла
+        public string? CurrentVideoFileName { get; set; }
     }
 }
