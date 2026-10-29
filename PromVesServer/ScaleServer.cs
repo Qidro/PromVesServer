@@ -15,12 +15,13 @@ namespace PromVesServer
         private readonly CounterStoragePNService _storagePN;
         private readonly ConfiguratorService _configuratorService;
         private readonly CameraCaptureService _cameraCaptureService;
+        private readonly CameraStatusVideo _cameraStatusVideo;
         private readonly IHostApplicationLifetime _hostApplicationLifetime;
         //конфигурацич modbus
         //private readonly ModbusTcpService _modbusTcpService;
         public ScaleServer(IConfiguration configuration, ILogger<ScaleServer> logger, ILoggerFactory loggerFactory, 
             CounterStorageService storage, CounterStoragePNService storagePN, ConfiguratorService configuratorService,
-            CameraCaptureService cameraCaptureService, IHostApplicationLifetime hostApplicationLifetime)
+            CameraCaptureService cameraCaptureService, CameraStatusVideo cameraStatusVideo, IHostApplicationLifetime hostApplicationLifetime)
         {
             _configuration = configuration;
             _logger = logger;
@@ -29,6 +30,7 @@ namespace PromVesServer
             _storagePN = storagePN;
             _configuratorService = configuratorService;
             _cameraCaptureService = cameraCaptureService;
+            _cameraStatusVideo = cameraStatusVideo;
             _hostApplicationLifetime = hostApplicationLifetime;
         }
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -233,23 +235,38 @@ namespace PromVesServer
                 // Task.WhenAll в конце ExecuteAsync будет ждать и задачи камер тоже.
                 foreach (var camera in camerasConfigResult.Data.Cameras)
                 {
-                    _logger.LogInformation("Запуск камеры {CameraId}", camera.Id);
-                    tasks.Add(Task.Run(
+                    _logger.LogInformation($"Запуск камеры {camera.Id}, типа: {camera.Type}");
+                    if (camera.Type == "video")
+                    {
+                        tasks.Add(Task.Run(
+                            () => _cameraCaptureService.RecordVideoAsync(
+                                camera,
+                                camera.Id,
+                                stoppingToken),
+                            stoppingToken));
+                    }
+                    else if (camera.Type == "photo")
+                    { 
+                        
+                    }
+                    else if (camera.Type == "recognition")
+                    {
+                        tasks.Add(Task.Run(
                          () => _cameraCaptureService.CaptureCameraAsync(
                          camera,
                          camera.Id,
                         stoppingToken),
                          stoppingToken));
-
-                    // Очистка запускается отдельно от захвата. Даже если камера
-                    // временно недоступна, её каталог продолжит очищаться.
-                    // Обе задачи получают один stoppingToken и завершаются вместе
-                    // при штатной остановке приложения.
-                    tasks.Add(Task.Run(
-                        () => _cameraCaptureService.CleanupOldPhotosAsync(
-                            camera.Id,
-                            stoppingToken),
-                        stoppingToken));
+                        // Очистка запускается отдельно от захвата. Даже если камера
+                        // временно недоступна, её каталог продолжит очищаться.
+                        // Обе задачи получают один stoppingToken и завершаются вместе
+                        // при штатной остановке приложения.
+                        tasks.Add(Task.Run(
+                            () => _cameraCaptureService.CleanupOldPhotosAsync(
+                                camera.Id,
+                                stoppingToken),
+                            stoppingToken));
+                    }
                 }
 
             }
@@ -258,7 +275,12 @@ namespace PromVesServer
 
             //отдельный логер для класса TcpServerService
             var readerLoggerTcpServerService = _loggerFactory.CreateLogger<TcpServerService>();
-            TcpServerService tcp = new TcpServerService(readerLoggerTcpServerService, _storage, _storagePN);
+            // Передаём тот же singleton CameraStatusVideo, который используется камерой.
+            TcpServerService tcp = new TcpServerService(
+                readerLoggerTcpServerService,
+                _storage,
+                _storagePN,
+                _cameraStatusVideo);
             //добавляем работу TCP/IP сервера в колекцию задач
             tasks.Add(tcp.StartAsync(stoppingToken));
             tasks.Add(tcp.StartPNAsync(stoppingToken));

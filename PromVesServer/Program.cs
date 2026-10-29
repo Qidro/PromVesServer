@@ -1,4 +1,5 @@
 using PromVesServer;
+using PromVesServer.Models;
 using PromVesServer.Service;
 using Serilog;
 using Serilog.Events;
@@ -42,6 +43,7 @@ try
             reloadOnChange: true);
 
     builder.Services.AddHostedService<ScaleServer>();
+    builder.Services.AddSingleton<CameraStatusVideo>();
     builder.Services.AddSingleton<CameraCaptureService>();
     builder.Services.AddSingleton<ConfiguratorService>();
     builder.Services.AddSingleton<CounterStorageService>();

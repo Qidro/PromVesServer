@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using PromVesServer.Models;
 
 namespace PromVesServer.Service
 {
@@ -11,6 +12,8 @@ namespace PromVesServer.Service
     {
         private readonly ILogger<TcpServerService> _logger;
         private readonly CounterStorageService _storage;
+        // Общий singleton-статус используется TCP-сервисом и сервисом камеры.
+        private readonly CameraStatusVideo _cameraStatusVideo;
 
         private readonly CounterStoragePNService _storageCalibration;
         private TcpListener? _listener;
@@ -18,11 +21,16 @@ namespace PromVesServer.Service
         private TcpListener? _listenerPN;
         private int Port = 5002; //порт сервера веса
         private int PortPN = 5003; //порт сервера кода АЦП
-        public TcpServerService(ILogger<TcpServerService> logger, CounterStorageService storage, CounterStoragePNService storageCalibration)
+        public TcpServerService(
+            ILogger<TcpServerService> logger,
+            CounterStorageService storage,
+            CounterStoragePNService storageCalibration,
+            CameraStatusVideo cameraStatusVideo)
         { 
             _logger = logger;
             _storage = storage;
             _storageCalibration = storageCalibration;
+            _cameraStatusVideo = cameraStatusVideo;
         }
         //запуск сервера отправки данных веса на клиент
         public async Task StartAsync(CancellationToken cancellationToken)
@@ -81,9 +89,12 @@ namespace PromVesServer.Service
             {
                 IPEndPoint? remote = client.Client.RemoteEndPoint as IPEndPoint;
                 NetworkStream stream = client.GetStream();
+                // Приём команд выполняется параллельно с отправкой данных веса.
+                _ = ReceiveClientMessagesAsync(stream, cancellationToken);
+
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    //формировани строки для клиента
+                    // Формируем строку с текущим весом и отправляем её клиенту.
                     byte[] buffer = Encoding.UTF8.GetBytes(_storage.GetMessage() + "\n");
 
                     await stream.WriteAsync(buffer, cancellationToken);
@@ -107,6 +118,54 @@ namespace PromVesServer.Service
             finally
             {
                client.Close();
+            }
+        }
+
+        // Читает команды клиента построчно, не блокируя отправку данных веса.
+        private async Task ReceiveClientMessagesAsync(
+            NetworkStream stream,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                using var reader = new StreamReader(
+                    stream,
+                    Encoding.UTF8,
+                    detectEncodingFromByteOrderMarks: false,
+                    bufferSize: 1024,
+                    leaveOpen: true);
+
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    string? message = await reader.ReadLineAsync(cancellationToken);
+                    if (message == null)
+                    {
+                        return;
+                    }
+
+                    HandleClientMessage(message);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Отмена чтения при остановке приложения является штатной.
+            }
+            catch (IOException ex)
+            {
+                _logger.LogDebug(ex, "TCP-клиент завершил соединение во время отправки команды");
+            }
+        }
+
+        // Обрабатывает команды, полученные от клиента TCP-сервера веса.
+        private void HandleClientMessage(string message)
+        {
+            var command = message.Trim();
+            if (string.Equals(command, "StartCapture", StringComparison.OrdinalIgnoreCase))
+            {
+                // CameraStatusVideo зарегистрирован singleton, поэтому это изменение
+                // сразу видно CameraCaptureService и другим классам приложения.
+                _cameraStatusVideo.CameraRun = true;
+                _logger.LogInformation("Получена команда StartCapture. Запись камеры разрешена");
             }
         }
         //получение IP

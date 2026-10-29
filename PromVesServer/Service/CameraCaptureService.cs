@@ -15,6 +15,7 @@ namespace PromVesServer.Service
         // не должна замедлять получение и сохранение кадров.
         // Первая проверка выполняется через 3 минуты после запуска задачи.
         private const int CleanupIntervalMinutes = 3;
+        private static readonly TimeSpan VideoRecordingLifetime = TimeSpan.FromMinutes(1);
         // Файл считается старым, если его время последнего изменения меньше,
         // чем текущее UTC-время минус 2 минуты.
         private static readonly TimeSpan PhotoLifetime = TimeSpan.FromMinutes(2);
@@ -33,6 +34,100 @@ namespace PromVesServer.Service
                 "Configuration",
                 "ConfigCameras.json");
             _imagesPath = Path.Combine(AppContext.BaseDirectory, "cameraPhoto");
+        }
+        //метод для создания видеофиксации процесса взвешивания, длительностью не более минуты
+        public async Task RecordVideoAsync(CameraSettingsModel camera, int cameraId, CancellationToken stoppingToken, CameraStatusVideo _cameraStatusVideo)
+        {
+            var cameraPath = Path.Combine(AppContext.BaseDirectory, "cameraVideo", $"Camera{cameraId}");
+            Directory.CreateDirectory(cameraPath);
+
+            try
+            {
+                // Задача запускается вместе с приложением, поэтому ждём TCP-команду
+                // StartCapture вместо завершения при первоначальном CameraRun == false.
+                while (!_cameraStatusVideo.CameraRun && !stoppingToken.IsCancellationRequested)
+                {
+                    await Task.Delay(100, stoppingToken);
+                }
+
+                if (stoppingToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                using var capture = new VideoCapture(camera.GetRtspUrl(), VideoCaptureAPIs.FFMPEG);
+                if (!capture.IsOpened())
+                {
+                    _logger.LogWarning("Не удалось подключиться к камере {CameraId} для записи видео", cameraId);
+                    return;
+                }
+
+                using var frame = new Mat();
+                var recordingStarted = Stopwatch.GetTimestamp();
+                var recordingLifetimeTicks = (long)(VideoRecordingLifetime.TotalSeconds * Stopwatch.Frequency);
+                var frameNumber = 0;
+                VideoWriter? writer = null;
+
+                try
+                {
+                    while (_cameraStatusVideo.CameraRun &&
+                           !stoppingToken.IsCancellationRequested &&
+                           Stopwatch.GetTimestamp() - recordingStarted < recordingLifetimeTicks)
+                    {
+                        if (!capture.Read(frame) || frame.Empty())
+                        {
+                            await Task.Delay(10, stoppingToken);
+                            continue;
+                        }
+
+                        if (writer == null)
+                        {
+                            var fps = capture.Fps;
+                            if (fps <= 0 || double.IsNaN(fps) || double.IsInfinity(fps))
+                            {
+                                fps = 25;
+                            }
+
+                            var fileName = $"{DateTime.UtcNow:yyyyMMdd_HHmmss_fff}_{cameraId}.mp4";
+                            var filePath = Path.Combine(cameraPath, fileName);
+                            writer = new VideoWriter(
+                                filePath,
+                                FourCC.MP4V,
+                                fps,
+                                new Size(frame.Width, frame.Height));
+
+                            if (!writer.IsOpened())
+                            {
+                                _logger.LogError("Не удалось открыть файл видео камеры {CameraId}: {FilePath}", cameraId, filePath);
+                                return;
+                            }
+
+                            _logger.LogInformation("Начата запись видео камеры {CameraId}: {FilePath}", cameraId, filePath);
+                        }
+
+                        writer.Write(frame);
+                        frameNumber++;
+                    }
+
+                    _logger.LogInformation("Запись видео камеры {CameraId} завершена. Кадров: {FrameCount}", cameraId, frameNumber);
+                }
+                finally
+                {
+                    writer?.Dispose();
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка записи видео камеры {CameraId}", cameraId);
+            }
+            finally
+            {
+                // Одна команда запускает только одну запись длительностью не более минуты.
+                _cameraStatusVideo.CameraRun = false;
+            }
         }
 
         // Загружает и проверяет настройки до создания задач подключения к камерам.
