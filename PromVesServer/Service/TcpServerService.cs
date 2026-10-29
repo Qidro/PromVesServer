@@ -167,6 +167,11 @@ namespace PromVesServer.Service
                 _cameraStatusVideo.CameraRun = true;
                 _logger.LogInformation("Получена команда StartCapture. Запись камеры разрешена");
             }
+            else if (string.Equals(command, "EndCapture", StringComparison.OrdinalIgnoreCase))
+            { 
+                _cameraStatusVideo.CameraRun = false;
+                _logger.LogInformation("Получена команда EndCapture. Запись камеры остановлена");
+            }
         }
         //получение IP
         private static IPAddress GetLocalIPAddress()

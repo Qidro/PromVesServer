@@ -1,6 +1,7 @@
 {
   "GeneralConfigurator": {
     "Protocol": "St",
-    "Board": "None"
+    "Board": "None",
+    "UseCamera": false
   }
 }

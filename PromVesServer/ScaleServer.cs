@@ -223,10 +223,17 @@ namespace PromVesServer
             // Загружаем и проверяем конфигурацию камер.
             // Задачи подключения создаются только после успешного результата.
             var camerasConfigResult = await _cameraCaptureService.GetConfigurationAsync(stoppingToken);
-            if (!camerasConfigResult.Success || camerasConfigResult.Data == null)
+            if (resutConfig.Data.UseCamera == false)
+            {
+                _logger.LogInformation("Камеры не будут запущены, так как использование камер отключено.");
+            }
+            else if (!camerasConfigResult.Success || camerasConfigResult.Data == null)
             {
                 _logger.LogError("Произошла ошибка получения конфигурации камер, причина: {Message}", camerasConfigResult.Message);
-                _hostApplicationLifetime.StopApplication();
+            }
+            else if (camerasConfigResult.Data.Cameras == null || camerasConfigResult.Data.Cameras.Count == 0)
+            {
+                _logger.LogWarning("Конфигурация камер пуста. Камеры не будут запущены.");
             }
             else
             {
@@ -242,12 +249,13 @@ namespace PromVesServer
                             () => _cameraCaptureService.RecordVideoAsync(
                                 camera,
                                 camera.Id,
-                                stoppingToken),
+                                stoppingToken,
+                                _cameraStatusVideo),
                             stoppingToken));
                     }
                     else if (camera.Type == "photo")
-                    { 
-                        
+                    {
+
                     }
                     else if (camera.Type == "recognition")
                     {

@@ -11,6 +11,8 @@ namespace PromVesServer.Models
         public string Protocol { get; set; } = "";
         //название табла
         public string Board { get; set; } = "";
+        //разрешение использования камер
+        public bool UseCamera { get; set; }
 
     }
     public class GeneralConfiguratorRoot
