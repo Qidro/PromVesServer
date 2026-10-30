@@ -183,7 +183,9 @@ namespace PromVesServer.Service
 
                 while (!cancellationToken.IsCancellationRequested)
                 {
+                    _logger.LogInformation("Ожидание команды клиента");
                     string? message = await reader.ReadLineAsync(cancellationToken);
+                    _logger.LogInformation("Получена строка: {Message}", message);
                     if (message == null)
                     {
                         return;
@@ -231,12 +233,12 @@ namespace PromVesServer.Service
             }
         }
 
-        // ждёт начала записи и отправляет имя файла один раз
+        // ждёт начала записи и отправляет путь файла один раз
         private async Task SendVideoFileNameOnceAsync(
             NetworkStream stream,
             CancellationToken cancellationToken)
         {
-            // имя появится после подключения камеры, ждём максимум 30 секунд
+            // путь появится после подключения камеры, ждём максимум 30 секунд
             var maxWaitTime = TimeSpan.FromSeconds(30);
             var waitStarted = Stopwatch.StartNew();
 
@@ -251,7 +253,7 @@ namespace PromVesServer.Service
             if (string.IsNullOrEmpty(videoFileName))
             {
                 // камера не начала запись — повтор возможен только по новому StartCapture
-                _logger.LogWarning("Имя файла записи не получено за {Seconds} секунд", maxWaitTime.TotalSeconds);
+                _logger.LogWarning("Путь файла записи не получен за {Seconds} секунд", maxWaitTime.TotalSeconds);
                 return;
             }
 
@@ -262,7 +264,7 @@ namespace PromVesServer.Service
             // обнуляем сразу после отправки — имя уходит только один раз
             _cameraStatusVideo.CurrentVideoFileName = null;
 
-            _logger.LogInformation("Клиенту отправлено имя файла записи: {FileName}", videoFileName);
+            _logger.LogInformation("Клиенту отправлен путь файла записи: {FilePath}", videoFileName);
         }
 
         //получение IP

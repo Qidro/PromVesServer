@@ -110,8 +110,8 @@ namespace PromVesServer.Service
 
                                 _logger.LogInformation("Начата запись видео камеры {CameraId}: {FilePath}", cameraId, filePath);
 
-                                // Запись успешно начата,передача статуса сообщаем имя файла
-                                cameraStatusVideo.CurrentVideoFileName = fileName;
+                                // Запись успешно начата,передача статуса сообщаем имя файла и пути
+                                cameraStatusVideo.CurrentVideoFileName = filePath;
                             }
 
                             writer.Write(frame);
