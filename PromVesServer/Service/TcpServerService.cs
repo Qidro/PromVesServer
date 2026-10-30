@@ -4,18 +4,25 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using PromVesServer.Models;
 
 namespace PromVesServer.Service
 {
     //Сервис предназначен для создания TCP серверов: отправка веса (5002),
-    //кода АЦП (5003) и обработка команд видеозаписи (5005)
+    //кода АЦП (5003) и обработка команд видеозаписи и фотографии (5005)
     public class TcpServerService
     {
+        // Максимальное время ожидания, за которое камера должна сделать фотографию.
+        private static readonly TimeSpan PhotoCaptureTimeout = TimeSpan.FromSeconds(30);
+        private const string PhotoCommandName = "CapturePhoto";
+
         private readonly ILogger<TcpServerService> _logger;
         private readonly CounterStorageService _storage;
         // Общий singleton-статус используется TCP-сервисом и сервисом камеры.
         private readonly CameraStatusVideo _cameraStatusVideo;
+        // Статус запроса на создание одной фотографии в папку PhotoWagon.
+        private readonly CameraStatusPhoto _cameraStatusPhoto;
 
         private readonly CounterStoragePNService _storageCalibration;
         private TcpListener? _listener;
@@ -24,17 +31,19 @@ namespace PromVesServer.Service
         private TcpListener? _listenerVideo;
         private int Port = 5002; //порт сервера веса
         private int PortPN = 5003; //порт сервера кода АЦП
-        private int PortVideo = 5005; //порт сервера команд видеозаписи
+        private int PortVideo = 5005; //порт сервера команд видеозаписи и фотографии
         public TcpServerService(
             ILogger<TcpServerService> logger,
             CounterStorageService storage,
             CounterStoragePNService storageCalibration,
-            CameraStatusVideo cameraStatusVideo)
+            CameraStatusVideo cameraStatusVideo,
+            CameraStatusPhoto cameraStatusPhoto)
         { 
             _logger = logger;
             _storage = storage;
             _storageCalibration = storageCalibration;
             _cameraStatusVideo = cameraStatusVideo;
+            _cameraStatusPhoto = cameraStatusPhoto;
         }
         //запуск сервера отправки данных веса на клиент
         public async Task StartAsync(CancellationToken cancellationToken)
@@ -192,7 +201,13 @@ namespace PromVesServer.Service
                     }
 
                     var command = message.Trim();
-                    if (string.Equals(command, "StartCapture", StringComparison.OrdinalIgnoreCase))
+                    // Команды фотографии приходят в формате JSON, команды
+                    // видеозаписи остаются простыми строками.
+                    if (command.StartsWith('{'))
+                    {
+                        await HandlePhotoCommandAsync(stream, command, cancellationToken);
+                    }
+                    else if (string.Equals(command, "StartCapture", StringComparison.OrdinalIgnoreCase))
                     {
                         // singleton, поэтому изменение сразу видно CameraCaptureService
                         _cameraStatusVideo.CameraRun = true;
@@ -231,6 +246,102 @@ namespace PromVesServer.Service
             {
                 client.Close();
             }
+        }
+
+        // Обрабатывает JSON-команду клиента на создание одной фотографии.
+        // Запрос передаётся в общий статус CameraStatusPhoto, который читает
+        // задача камеры типа photo, после чего клиенту отправляется JSON-ответ.
+        private async Task HandlePhotoCommandAsync(
+            NetworkStream stream,
+            string message,
+            CancellationToken cancellationToken)
+        {
+            PhotoCaptureRequestModel? request;
+
+            try
+            {
+                request = JsonSerializer.Deserialize<PhotoCaptureRequestModel>(message);
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex, "Получена некорректная JSON-команда: {Message}", message);
+                await SendPhotoResponseAsync(stream, false, null, null, cancellationToken);
+                return;
+            }
+
+            if (request == null ||
+                !string.Equals(request.Command, PhotoCommandName, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning("Неизвестная JSON-команда: {Message}", message);
+                await SendPhotoResponseAsync(stream, false, request?.RequestId, null, cancellationToken);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(request.RequestId))
+            {
+                // Без requestId клиент не сможет сопоставить ответ со своей командой.
+                _logger.LogWarning("Команда {Command} получена без requestId", PhotoCommandName);
+                await SendPhotoResponseAsync(stream, false, null, null, cancellationToken);
+                return;
+            }
+
+            _logger.LogInformation(
+                "Получена команда {Command}. RequestId: {RequestId}",
+                PhotoCommandName,
+                request.RequestId);
+
+            // Регистрируем запрос до ожидания, чтобы задача камеры успела его увидеть.
+            var captureTask = _cameraStatusPhoto.RequestPhotoAsync(request.RequestId);
+
+            string? fileName = null;
+
+            try
+            {
+                fileName = await captureTask.WaitAsync(PhotoCaptureTimeout, cancellationToken);
+            }
+            catch (TimeoutException)
+            {
+                // Камера не ответила за отведённое время (нет связи или камера
+                // типа photo не настроена), клиент получает success = false.
+                _logger.LogWarning(
+                    "Фотография не создана за {Seconds} секунд. RequestId: {RequestId}",
+                    PhotoCaptureTimeout.TotalSeconds,
+                    request.RequestId);
+            }
+
+            var success = !string.IsNullOrEmpty(fileName);
+            if (success)
+            {
+                _logger.LogInformation(
+                    "Клиенту отправлено имя фотографии: {FileName}. RequestId: {RequestId}",
+                    fileName,
+                    request.RequestId);
+            }
+
+            await SendPhotoResponseAsync(stream, success, request.RequestId, fileName, cancellationToken);
+        }
+
+        // Отправляет клиенту JSON-ответ на команду создания фотографии.
+        private static async Task SendPhotoResponseAsync(
+            NetworkStream stream,
+            bool success,
+            string? requestId,
+            string? fileName,
+            CancellationToken cancellationToken)
+        {
+            var response = new PhotoCaptureResponseModel
+            {
+                Success = success,
+                RequestId = requestId,
+                FileName = fileName
+            };
+
+            // Перевод строки завершает ответ, поэтому клиент может читать
+            // сообщения построчно, как и команды видеозаписи.
+            var json = JsonSerializer.Serialize(response);
+            byte[] buffer = Encoding.UTF8.GetBytes(json + "\n");
+
+            await stream.WriteAsync(buffer, cancellationToken);
         }
 
         // ждёт начала записи и отправляет путь файла один раз

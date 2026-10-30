@@ -44,6 +44,7 @@ try
 
     builder.Services.AddHostedService<ScaleServer>();
     builder.Services.AddSingleton<CameraStatusVideo>();
+    builder.Services.AddSingleton<CameraStatusPhoto>();
     builder.Services.AddSingleton<CameraCaptureService>();
     builder.Services.AddSingleton<ConfiguratorService>();
     builder.Services.AddSingleton<CounterStorageService>();

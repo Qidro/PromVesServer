@@ -16,12 +16,14 @@ namespace PromVesServer
         private readonly ConfiguratorService _configuratorService;
         private readonly CameraCaptureService _cameraCaptureService;
         private readonly CameraStatusVideo _cameraStatusVideo;
+        private readonly CameraStatusPhoto _cameraStatusPhoto;
         private readonly IHostApplicationLifetime _hostApplicationLifetime;
         //конфигурацич modbus
         //private readonly ModbusTcpService _modbusTcpService;
         public ScaleServer(IConfiguration configuration, ILogger<ScaleServer> logger, ILoggerFactory loggerFactory, 
             CounterStorageService storage, CounterStoragePNService storagePN, ConfiguratorService configuratorService,
-            CameraCaptureService cameraCaptureService, CameraStatusVideo cameraStatusVideo, IHostApplicationLifetime hostApplicationLifetime)
+            CameraCaptureService cameraCaptureService, CameraStatusVideo cameraStatusVideo,
+            CameraStatusPhoto cameraStatusPhoto, IHostApplicationLifetime hostApplicationLifetime)
         {
             _configuration = configuration;
             _logger = logger;
@@ -31,6 +33,7 @@ namespace PromVesServer
             _configuratorService = configuratorService;
             _cameraCaptureService = cameraCaptureService;
             _cameraStatusVideo = cameraStatusVideo;
+            _cameraStatusPhoto = cameraStatusPhoto;
             _hostApplicationLifetime = hostApplicationLifetime;
         }
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -255,7 +258,16 @@ namespace PromVesServer
                     }
                     else if (camera.Type == "photo")
                     {
-
+                        // Задача ждёт команду CapturePhoto от клиента, делает
+                        // одну фотографию в папку PhotoWagon и возвращает
+                        // её имя через общий статус CameraStatusPhoto.
+                        tasks.Add(Task.Run(
+                            () => _cameraCaptureService.CapturePhotoAsync(
+                                camera,
+                                camera.Id,
+                                stoppingToken,
+                                _cameraStatusPhoto),
+                            stoppingToken));
                     }
                     else if (camera.Type == "recognition")
                     {
@@ -288,7 +300,8 @@ namespace PromVesServer
                 readerLoggerTcpServerService,
                 _storage,
                 _storagePN,
-                _cameraStatusVideo);
+                _cameraStatusVideo,
+                _cameraStatusPhoto);
             //добавляем работу TCP/IP сервера в колекцию задач
             tasks.Add(tcp.StartAsync(stoppingToken));
             tasks.Add(tcp.StartPNAsync(stoppingToken));

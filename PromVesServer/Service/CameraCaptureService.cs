@@ -24,6 +24,8 @@ namespace PromVesServer.Service
         // работала из Visual Studio, при публикации и в виде Windows Service.
         private readonly string _configurationPath;
         private readonly string _imagesPath;
+        // Папка для одиночных фотографий вагона по команде клиента CapturePhoto.
+        private readonly string _photoWagonPath;
 
         public CameraCaptureService(
             ILogger<CameraCaptureService> logger)
@@ -34,6 +36,7 @@ namespace PromVesServer.Service
                 "Configuration",
                 "ConfigCameras.json");
             _imagesPath = Path.Combine(AppContext.BaseDirectory, "cameraPhoto");
+            _photoWagonPath = Path.Combine(AppContext.BaseDirectory, "PhotoWagon");
         }
         // Ожидает команду запуска, записывает видео не более минуты и
         // продолжает работу до остановки приложения, переподключаясь после ошибок.
@@ -141,6 +144,90 @@ namespace PromVesServer.Service
                     await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
                 }
             }
+        }
+
+        // Ожидает запрос на создание фотографии и сохраняет один кадр
+        // в папку PhotoWagon. Запрос помещает TCP-сервер (порт 5005),
+        // а результат через CameraStatusPhoto получает клиент.
+        public async Task CapturePhotoAsync(
+            CameraSettingsModel camera,
+            int cameraId,
+            CancellationToken stoppingToken,
+            CameraStatusPhoto cameraStatusPhoto)
+        {
+            Directory.CreateDirectory(_photoWagonPath);
+
+            try
+            {
+                while (!stoppingToken.IsCancellationRequested)
+                {
+                    // Проверяем статус чаще, чем открывается соединение,
+                    // чтобы фотография создавалась сразу после команды клиента.
+                    if (!cameraStatusPhoto.TryTakeRequest(out var requestId))
+                    {
+                        await Task.Delay(100, stoppingToken);
+                        continue;
+                    }
+
+                    try
+                    {
+                        var fileName = SavePhoto(camera, cameraId);
+                        cameraStatusPhoto.CompleteCapture(requestId, fileName);
+
+                        _logger.LogInformation(
+                            "Фотография камеры {CameraId} сохранена: {FileName}",
+                            cameraId,
+                            fileName);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Ошибка одной съёмки не останавливает задачу: следующая
+                        // команда клиента снова попробует подключиться к камере.
+                        cameraStatusPhoto.FailCapture(requestId);
+
+                        _logger.LogError(
+                            ex,
+                            "Не удалось создать фотографию камеры {CameraId}. RequestId: {RequestId}",
+                            cameraId,
+                            requestId);
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                // Штатная остановка приложения.
+            }
+        }
+
+        // Подключается к камере, читает один кадр и сохраняет его в PhotoWagon.
+        // Возвращает имя созданного файла.
+        private string SavePhoto(CameraSettingsModel camera, int cameraId)
+        {
+            // Для каждой команды создаётся новое подключение: камера не держит
+            // постоянный поток, пока клиент не попросил фотографию.
+            using var capture = new VideoCapture(camera.GetRtspUrl(), VideoCaptureAPIs.FFMPEG);
+            if (!capture.IsOpened())
+            {
+                throw new IOException($"Не удалось подключиться к камере {cameraId}");
+            }
+
+            using var frame = new Mat();
+            if (!capture.Read(frame) || frame.Empty())
+            {
+                throw new IOException($"Камера {cameraId} не вернула кадр");
+            }
+
+            // В имени время в UTC с миллисекундами, как в примере
+            // 20261030_155130_123.jpg: файлы не перезаписывают друг друга.
+            var fileName = $"{DateTime.UtcNow:yyyyMMdd_HHmmss_fff}.jpg";
+            var filePath = Path.Combine(_photoWagonPath, fileName);
+
+            if (!Cv2.ImWrite(filePath, frame))
+            {
+                throw new IOException($"Не удалось сохранить фотографию: {filePath}");
+            }
+
+            return fileName;
         }
 
         // Загружает и проверяет настройки до создания задач подключения к камерам.
