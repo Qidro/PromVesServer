@@ -35,7 +35,7 @@ namespace PromVesServer.Service
                 AppContext.BaseDirectory,
                 "Configuration",
                 "ConfigCameras.json");
-            _imagesPath = Path.Combine(AppContext.BaseDirectory, "cameraPhoto");
+            _imagesPath = Path.Combine(AppContext.BaseDirectory, "СameraPhoto");
             _photoWagonPath = Path.Combine(AppContext.BaseDirectory, "PhotoWagon");
         }
         // Ожидает команду запуска, записывает видео не более минуты и
@@ -46,7 +46,7 @@ namespace PromVesServer.Service
             CancellationToken stoppingToken,
             CameraStatusVideo cameraStatusVideo)
         {
-            var cameraPath = Path.Combine(AppContext.BaseDirectory, "cameraVideo", $"Camera{cameraId}");
+            var cameraPath = Path.Combine(AppContext.BaseDirectory, "СameraVideo");
             Directory.CreateDirectory(cameraPath);
 
             while (!stoppingToken.IsCancellationRequested)
@@ -114,7 +114,7 @@ namespace PromVesServer.Service
                                 _logger.LogInformation("Начата запись видео камеры {CameraId}: {FilePath}", cameraId, filePath);
 
                                 // Запись успешно начата,передача статуса сообщаем имя файла и пути
-                                cameraStatusVideo.CurrentVideoFileName = filePath;
+                                cameraStatusVideo.CurrentVideoFileName = fileName;
                             }
 
                             writer.Write(frame);
