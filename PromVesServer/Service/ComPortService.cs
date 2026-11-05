@@ -28,8 +28,10 @@ namespace PromVesServer.Service
         private readonly CounterStorageService _storage;
         //ялвяется ли это протоколом ModbusRtu
         private readonly bool _modbusRtu;
+
+        private readonly DynamicWeightCalculator _dynamicWeightCalculator;
         //private readonly StringBuilder _buffer = new();
-        public ComPortService(SerialPortSettingsModel settings, ILogger<ComPortService> logger, CounterStorageService storage, bool modbusRtu)
+        public ComPortService(SerialPortSettingsModel settings, ILogger<ComPortService> logger, CounterStorageService storage, bool modbusRtu, DynamicWeightCalculator dynamicWeightCalculator)
         {
             //Индификатор порта
             IdPort = settings.Id;
@@ -50,13 +52,14 @@ namespace PromVesServer.Service
             _logger = logger;
             _storage = storage;
             _modbusRtu = modbusRtu;
+            _dynamicWeightCalculator = dynamicWeightCalculator;
             //инициализация первых данных
             _storage.InitPort(IdPort);
             _logger.LogDebug(
         $"Создан ComPortService: Id={IdPort}, Port={NamePort}");
         }
         //метод открытия com порта и получение данных от устройства по выбранному протоколуы
-        public async Task ConnectSerialPort(CancellationToken cancellationToken)
+        public async Task ConnectSerialPort(CancellationToken cancellationToken, bool stateDynamic)
         {
             var adapter = new SerialPortAdapter(_serialPort);
             var factory = new ModbusFactory();
@@ -165,6 +168,11 @@ namespace PromVesServer.Service
                                 value);
 
                             _storage.UpdateValue(IdPort, value);
+                            if (stateDynamic)
+                            {
+                                // Обработка динамического обновления состояния
+                                _dynamicWeightCalculator.AddMeasurement(IdPort, value);
+                            }
                         }
                     }
                     

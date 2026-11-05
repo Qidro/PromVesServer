@@ -12,6 +12,7 @@ namespace PromVesServer
         //общий обьект для других классов, отвечает за сохранение данных с com портов
         private readonly CounterStorageService _storage;
         //
+        private readonly DynamicWeightCalculator _dynamicWeightCalculator;
         private readonly CounterStoragePNService _storagePN;
         private readonly ConfiguratorService _configuratorService;
         private readonly CameraCaptureService _cameraCaptureService;
@@ -23,7 +24,7 @@ namespace PromVesServer
         public ScaleServer(IConfiguration configuration, ILogger<ScaleServer> logger, ILoggerFactory loggerFactory, 
             CounterStorageService storage, CounterStoragePNService storagePN, ConfiguratorService configuratorService,
             CameraCaptureService cameraCaptureService, CameraStatusVideo cameraStatusVideo,
-            CameraStatusPhoto cameraStatusPhoto, IHostApplicationLifetime hostApplicationLifetime)
+            CameraStatusPhoto cameraStatusPhoto, DynamicWeightCalculator dynamicWeightCalculator, IHostApplicationLifetime hostApplicationLifetime)
         {
             _configuration = configuration;
             _logger = logger;
@@ -35,6 +36,7 @@ namespace PromVesServer
             _cameraStatusVideo = cameraStatusVideo;
             _cameraStatusPhoto = cameraStatusPhoto;
             _hostApplicationLifetime = hostApplicationLifetime;
+            _dynamicWeightCalculator = dynamicWeightCalculator;
         }
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
@@ -119,11 +121,12 @@ namespace PromVesServer
                     var _comPortService = new ComPortService(port,
                         readerLogger,
                         _storage,
-                        resutConfig.Data.Protocol == "ModbusRtu");
-
+                        resutConfig.Data.Protocol == "ModbusRtu",
+                        _dynamicWeightCalculator);
+                        
                     //создание нового компонента в List
                     tasks.Add(
-                        _comPortService.ConnectSerialPort(stoppingToken));
+                        _comPortService.ConnectSerialPort(stoppingToken, resutConfig.Data.StateDynamic));
                 }
             }
             else if(resutConfig.Data.Protocol == "Titan")
@@ -137,7 +140,8 @@ namespace PromVesServer
                     var _comPortService = new ComPortService(port,
                         readerLogger,
                         _storage,
-                        resutConfig.Data.Protocol == "Titan");
+                        resutConfig.Data.Protocol == "Titan",
+                        _dynamicWeightCalculator);
                     //создание нового компонента в List
                     tasks.Add(
                         _comPortService.ConnectSerialPortTitan(stoppingToken));

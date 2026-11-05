@@ -13,6 +13,8 @@ namespace PromVesServer.Models
         public string Board { get; set; } = "";
         //разрешение использования камер
         public bool UseCamera { get; set; }
+        //режим динамического отображения состояния
+        public bool StateDynamic { get; set; }
 
     }
     public class GeneralConfiguratorRoot

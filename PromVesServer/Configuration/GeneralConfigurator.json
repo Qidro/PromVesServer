@@ -2,6 +2,7 @@
   "GeneralConfigurator": {
     "Protocol": "St",
     "Board": "None",
-    "UseCamera": true
+    "UseCamera": true,
+    "StateDynamic": true
   }
 }
