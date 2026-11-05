@@ -26,6 +26,8 @@ namespace PromVesServer.Service
         // Общее хранилище состояний шести каналов PN.
         private readonly CounterStoragePNService _storageCalibration;
         private readonly CounterStorageService _storage;
+        // Дискретность измерения веса.
+        private const decimal WeightStep = 50;
 
         public PNService(SerialPortSettingsModel settings, ILogger<PNService> logger, CounterStoragePNService storageCalibration,
             CounterStorageService storage, List<PNCalibrationSettingModel> PNCalibrationSetting)
@@ -95,12 +97,24 @@ namespace PromVesServer.Service
                 for (int i = 0; i < latest.Length; i++)
                 {
                     _storageCalibration.UpdateValue(i + 1, latest[i]);
-                    _storage.UpdateValue(i + 1, Math.Truncate(latest[i] * _PNCalibrationSetting[i].WeightCoefficient));
-                    _logger.LogDebug($"Канал {i + 1}: АЦП код={latest[i]}, вес={Math.Truncate(latest[i] * _PNCalibrationSetting[i].WeightCoefficient)}");
+                    var calculatedWeight = latest[i] * _PNCalibrationSetting[i].WeightCoefficient;
+
+                    // Округление вниз до ближайшего значения, кратного 50:
+                    // 123 -> 100, 149 -> 100, 150 -> 150.
+                    var discreteWeight = Math.Truncate(calculatedWeight / WeightStep) * WeightStep;
+
+                    // Округление до ближайшего значения:
+                    // var discreteWeight = Math.Round(calculatedWeight / WeightStep) * WeightStep;
+
+                    // Округление вверх до ближайшего значения:
+                    // var discreteWeight = Math.Ceiling(calculatedWeight / WeightStep) * WeightStep;
+
+                    _storage.UpdateValue(i + 1, discreteWeight);
+                    _logger.LogDebug($"Канал {i + 1}: АЦП код={latest[i]}, вес={discreteWeight}");
                 }
 
                 lastValid = timer.ElapsedMilliseconds;
-                good++;
+                good++; 
             };
 
             // Этот обработчик вызывается, если кадр не прошёл проверку.
