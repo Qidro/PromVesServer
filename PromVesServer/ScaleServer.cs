@@ -13,6 +13,9 @@ namespace PromVesServer
         private readonly CounterStorageService _storage;
         //
         private readonly DynamicWeightCalculator _dynamicWeightCalculator;
+        // Singleton-агрегатор хранит завершённые вагоны и суммирует результаты
+        // боковых сторон, поступающие от DynamicWeightCalculator.
+        private readonly RailcarWeightAggregator _railcarWeightAggregator;
         private readonly CounterStoragePNService _storagePN;
         private readonly ConfiguratorService _configuratorService;
         private readonly CameraCaptureService _cameraCaptureService;
@@ -24,7 +27,8 @@ namespace PromVesServer
         public ScaleServer(IConfiguration configuration, ILogger<ScaleServer> logger, ILoggerFactory loggerFactory, 
             CounterStorageService storage, CounterStoragePNService storagePN, ConfiguratorService configuratorService,
             CameraCaptureService cameraCaptureService, CameraStatusVideo cameraStatusVideo,
-            CameraStatusPhoto cameraStatusPhoto, DynamicWeightCalculator dynamicWeightCalculator, IHostApplicationLifetime hostApplicationLifetime)
+             CameraStatusPhoto cameraStatusPhoto, DynamicWeightCalculator dynamicWeightCalculator,
+             RailcarWeightAggregator railcarWeightAggregator, IHostApplicationLifetime hostApplicationLifetime)
         {
             _configuration = configuration;
             _logger = logger;
@@ -37,6 +41,11 @@ namespace PromVesServer
             _cameraStatusPhoto = cameraStatusPhoto;
             _hostApplicationLifetime = hostApplicationLifetime;
             _dynamicWeightCalculator = dynamicWeightCalculator;
+            _railcarWeightAggregator = railcarWeightAggregator;
+            // После завершения взвешивания одной стороны результат передаётся
+            // агрегатору. Он дождётся остальных активных COM-портов и только
+            // после этого добавит общий вес вагона в свой список.
+            _dynamicWeightCalculator.WeighingCompleted += _railcarWeightAggregator.AddMeasurement;
         }
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
@@ -111,6 +120,10 @@ namespace PromVesServer
             //проверяем заданные параметры
             if (resutConfig.Data.Protocol == "St" || resutConfig.Data.Protocol == "ModbusRtu")
             {
+                // Передаём агрегатору только реально настроенные COM-порты.
+                // Остальные боковые стороны вагона будут иметь вес 0.
+                _railcarWeightAggregator.SetActivePorts(ports.Select(port => port.Id));
+
                 //перебираем ports с конфигурациями com портов 
                 foreach (var port in ports)
                 {

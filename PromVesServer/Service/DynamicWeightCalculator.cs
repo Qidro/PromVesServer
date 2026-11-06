@@ -48,14 +48,14 @@ namespace PromVesServer.Service
     // Для каждого COM-порта создаётся собственное состояние.
     public class DynamicWeightCalculator
     {
+        private readonly ILogger<DynamicWeightCalculator> _logger;
+
         // -------------------------------------------------
         // 1. СИНХРОНИЗАЦИЯ
         // -------------------------------------------------
-        // Защищает словарь _ports от одновременного доступа из нескольких потоков.
-        // Например:
-        // один поток добавляет измерение,
-        // другой поток запрашивает состояние порта.
-        private readonly object _lock = new();
+        // Защищает только словарь _ports при получении или создании состояния.
+        // Обработка измерений выполняется под отдельной блокировкой каждого порта.
+        private readonly object _portsLock = new();
 
         // Состояния всех весовых платформ.
         //
@@ -130,12 +130,14 @@ namespace PromVesServer.Service
         // -------------------------------------------------
 
         public DynamicWeightCalculator(
+            ILogger<DynamicWeightCalculator> logger,
             decimal startThreshold = 2500m,
             decimal endThreshold = 1000m,
             int endDelayMs = 300,
             int minWeighingTimeMs = 300,
             decimal baselineAlpha = 0.01m)
         {
+            _logger = logger;
             _startThreshold = startThreshold;
 
             _endThreshold = endThreshold;
@@ -167,7 +169,8 @@ namespace PromVesServer.Service
             // Пока мы находимся внутри lock, событие не вызываем.
             DynamicWeightResult? completedResult = null;
 
-            lock (_lock)
+            PortState state;
+            lock (_portsLock)
             {
                 // -----------------------------------------
                 // ШАГ 1. Получаем состояние нужного COM-порта
@@ -177,12 +180,18 @@ namespace PromVesServer.Service
                 // получаем его.
                 //
                 // Если нет - создаём новое.
-                if (!_ports.TryGetValue(portId, out var state))
+                if (!_ports.TryGetValue(portId, out state))
                 {
                     state = new PortState();
 
                     _ports[portId] = state;
                 }
+            }
+
+            // Каждый COM-порт блокируется отдельно. Измерение одного порта
+            // не блокирует обработку измерений остальных портов.
+            lock (state.SyncRoot)
+            {
 
 
                 // -----------------------------------------
@@ -419,6 +428,14 @@ namespace PromVesServer.Service
             // удерживая блокировку всего калькулятора.
             if (completedResult != null)
             {
+                _logger.LogInformation(
+                    "Вагон распознан. Порт: {PortId}, масса: {Weight} кг, " +
+                    "начальная нагрузка: {InitialWeight} кг, длительность: {Duration}",
+                    completedResult.PortId,
+                    completedResult.PeakWeight,
+                    completedResult.InitialWeight,
+                    completedResult.Duration);
+
                 WeighingCompleted?.Invoke(completedResult);
             }
         }
@@ -435,6 +452,9 @@ namespace PromVesServer.Service
         /// </summary>
         private class PortState
         {
+            // Блокировка состояния этого конкретного COM-порта.
+            public object SyncRoot { get; } = new();
+
             // Показывает, получено ли хотя бы одно измерение.
             public bool Initialized { get; set; }
 

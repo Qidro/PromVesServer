@@ -46,6 +46,10 @@ try
     builder.Services.AddSingleton<CameraStatusVideo>();
     builder.Services.AddSingleton<CameraStatusPhoto>();
     builder.Services.AddSingleton<CameraCaptureService>();
+    builder.Services.AddSingleton<DynamicWeightCalculator>();
+    // Один агрегатор хранит список вагонов и получает результаты всех COM-портов.
+    builder.Services.AddSingleton<RailcarWeightStorageService>();
+    builder.Services.AddSingleton<RailcarWeightAggregator>();
     builder.Services.AddSingleton<ConfiguratorService>();
     builder.Services.AddSingleton<CounterStorageService>();
     builder.Services.AddSingleton<CounterStoragePNService>();
