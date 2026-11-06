@@ -23,27 +23,33 @@ namespace PromVesServer.Service
         private readonly CameraStatusVideo _cameraStatusVideo;
         // Статус запроса на создание одной фотографии в папку PhotoWagon.
         private readonly CameraStatusPhoto _cameraStatusPhoto;
+        // Singleton-хранилище завершённых результатов вагонов.
+        private readonly RailcarWeightStorageService _railcarWeightStorage;
 
         private readonly CounterStoragePNService _storageCalibration;
         private TcpListener? _listener;
 
         private TcpListener? _listenerPN;
         private TcpListener? _listenerVideo;
+        private TcpListener? _listenerDynamicWeight;
         private int Port = 5002; //порт сервера веса
         private int PortPN = 5003; //порт сервера кода АЦП
         private int PortVideo = 5005; //порт сервера команд видеозаписи и фотографии
+        private int PortDynamicWeight = 5004; //порт результатов динамического взвешивания
         public TcpServerService(
             ILogger<TcpServerService> logger,
             CounterStorageService storage,
             CounterStoragePNService storageCalibration,
             CameraStatusVideo cameraStatusVideo,
-            CameraStatusPhoto cameraStatusPhoto)
+            CameraStatusPhoto cameraStatusPhoto,
+            RailcarWeightStorageService railcarWeightStorage)
         { 
             _logger = logger;
             _storage = storage;
             _storageCalibration = storageCalibration;
             _cameraStatusVideo = cameraStatusVideo;
             _cameraStatusPhoto = cameraStatusPhoto;
+            _railcarWeightStorage = railcarWeightStorage;
         }
         //запуск сервера отправки данных веса на клиент
         public async Task StartAsync(CancellationToken cancellationToken)
@@ -129,6 +135,101 @@ namespace PromVesServer.Service
             finally
             {
                client.Close();
+            }
+        }
+
+        // Запускает отдельный TCP-сервер результатов динамического взвешивания.
+        // Клиент подключается к порту 5004 и получает JSON-массив всех вагонов,
+        // сохранённых в общем RailcarWeightStorageService.
+        public async Task StartDynamicWeightAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                IPAddress ipAddress = GetLocalIPAddress();
+                _listenerDynamicWeight = new TcpListener(ipAddress, PortDynamicWeight);
+                _listenerDynamicWeight.Start();
+
+                _logger.LogInformation(
+                    "TCP сервер динамического взвешивания запущен: {ip}:{port}",
+                    ipAddress,
+                    PortDynamicWeight);
+
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    try
+                    {
+                        TcpClient client = await _listenerDynamicWeight.AcceptTcpClientAsync(cancellationToken);
+                        await HandleDynamicWeightClientAsync(client, cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Ошибка TCP-сервера динамического взвешивания");
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("Запуск TCP-сервера динамического взвешивания отменён.");
+            }
+            catch (SocketException ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Не удалось запустить TCP-сервер динамического взвешивания на порту {Port}",
+                    PortDynamicWeight);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка запуска TCP-сервера динамического взвешивания");
+            }
+            finally
+            {
+                _listenerDynamicWeight?.Stop();
+                _listenerDynamicWeight = null;
+                _logger.LogInformation("TCP сервер динамического взвешивания остановлен");
+            }
+        }
+
+        // Отправляет клиенту полный актуальный список вагонов каждые 200 мс.
+        // Каждая JSON-строка является отдельным TCP-сообщением прикладного
+        // протокола и заканчивается символом перевода строки.
+        private async Task HandleDynamicWeightClientAsync(
+            TcpClient client,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                NetworkStream stream = client.GetStream();
+
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    var railcars = _railcarWeightStorage.GetAll();
+                    var message = JsonSerializer.Serialize(railcars) + "\n";
+                    byte[] buffer = Encoding.UTF8.GetBytes(message);
+
+                    await stream.WriteAsync(buffer, cancellationToken);
+                    await Task.Delay(200, cancellationToken);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("Передача результатов динамического взвешивания остановлена.");
+            }
+            catch (IOException ex)
+            {
+                _logger.LogDebug(ex, "Клиент динамического взвешивания завершил соединение");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка отправки результатов динамического взвешивания");
+            }
+            finally
+            {
+                client.Close();
             }
         }
 

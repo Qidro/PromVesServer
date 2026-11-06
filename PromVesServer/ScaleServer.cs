@@ -16,6 +16,7 @@ namespace PromVesServer
         // Singleton-агрегатор хранит завершённые вагоны и суммирует результаты
         // боковых сторон, поступающие от DynamicWeightCalculator.
         private readonly RailcarWeightAggregator _railcarWeightAggregator;
+        private readonly RailcarWeightStorageService _railcarWeightStorage;
         private readonly CounterStoragePNService _storagePN;
         private readonly ConfiguratorService _configuratorService;
         private readonly CameraCaptureService _cameraCaptureService;
@@ -28,7 +29,9 @@ namespace PromVesServer
             CounterStorageService storage, CounterStoragePNService storagePN, ConfiguratorService configuratorService,
             CameraCaptureService cameraCaptureService, CameraStatusVideo cameraStatusVideo,
              CameraStatusPhoto cameraStatusPhoto, DynamicWeightCalculator dynamicWeightCalculator,
-             RailcarWeightAggregator railcarWeightAggregator, IHostApplicationLifetime hostApplicationLifetime)
+             RailcarWeightAggregator railcarWeightAggregator,
+             RailcarWeightStorageService railcarWeightStorage,
+             IHostApplicationLifetime hostApplicationLifetime)
         {
             _configuration = configuration;
             _logger = logger;
@@ -42,6 +45,7 @@ namespace PromVesServer
             _hostApplicationLifetime = hostApplicationLifetime;
             _dynamicWeightCalculator = dynamicWeightCalculator;
             _railcarWeightAggregator = railcarWeightAggregator;
+            _railcarWeightStorage = railcarWeightStorage;
             // После завершения взвешивания одной стороны результат передаётся
             // агрегатору. Он дождётся остальных активных COM-портов и только
             // после этого добавит общий вес вагона в свой список.
@@ -60,7 +64,7 @@ namespace PromVesServer
             //получаем конфигурацию табла
             var resutConfigBoard = await _configuratorService.GetBoardSettingAsync();
             //проверяем на успешность
-            if (resutConfig.Success == false && resutConfig.Data == null)
+            if (resutConfig.Success == false || resutConfig.Data == null)
             {
                 _logger.LogError($"Произошла ошибка получения master-конфигурации, причина: {resutConfig.Message}");
                 _hostApplicationLifetime.StopApplication();
@@ -318,12 +322,25 @@ namespace PromVesServer
                 _storage,
                 _storagePN,
                 _cameraStatusVideo,
-                _cameraStatusPhoto);
+                _cameraStatusPhoto,
+                _railcarWeightStorage);
             //добавляем работу TCP/IP сервера в колекцию задач
             tasks.Add(tcp.StartAsync(stoppingToken));
-            tasks.Add(tcp.StartPNAsync(stoppingToken));
+            //сервер для ПН на порту 5003
+            if (resutConfig.Data.Protocol == "PN")
+            {
+                tasks.Add(tcp.StartPNAsync(stoppingToken));
+            }
+            //сервер результатов динамического взвешивания на порту 5004
+            if (resutConfig.Data.StateDynamic == true)
+            {
+                tasks.Add(tcp.StartDynamicWeightAsync(stoppingToken));
+            }
             //сервер команд видеозаписи на порту 5005
-            tasks.Add(tcp.StartVideoAsync(stoppingToken));
+            if (resutConfig.Data.UseCamera == true)
+            {
+                tasks.Add(tcp.StartVideoAsync(stoppingToken));
+            }
 
             //отдельный логер для класса FileService
             var readerLoggerFileService = _loggerFactory.CreateLogger<FileService>();
