@@ -50,7 +50,11 @@ namespace PromVesServer.Service
             _logger = logger;
             _storageCalibration = storageCalibration;
             _storage = storage;
-            _PNCalibrationSetting = PNCalibrationSetting;
+            //_PNCalibrationSetting = PNCalibrationSetting;
+            //сортировка по каналам
+            _PNCalibrationSetting = PNCalibrationSetting
+            .OrderBy(x => x.ChannelNumber)
+            .ToList();
             // PN-контроллер передаёт ровно шесть значений.
             // Инициализируем все каналы до получения первого корректного кадра,
             // чтобы они сразу присутствовали в хранилище со статусом OFFLINE.
@@ -97,14 +101,15 @@ namespace PromVesServer.Service
                 for (int i = 0; i < latest.Length; i++)
                 {
                     _storageCalibration.UpdateValue(i + 1, latest[i]);
-                    var calculatedWeight = latest[i] * _PNCalibrationSetting[i].WeightCoefficient;
-
+                    var calculatedWeight = (latest[i] - _PNCalibrationSetting[i].ZeroCode) * _PNCalibrationSetting[i].WeightCoefficient;
+                    //старая версия
+                    //var calculatedWeight = latest[i] * _PNCalibrationSetting[i].WeightCoefficient;
                     // Округление вниз до ближайшего значения, кратного 50:
                     // 123 -> 100, 149 -> 100, 150 -> 150.
-                    var discreteWeight = Math.Truncate(calculatedWeight / WeightStep) * WeightStep;
+                    //var discreteWeight = Math.Truncate(calculatedWeight / WeightStep) * WeightStep;
 
                     // Округление до ближайшего значения:
-                    // var discreteWeight = Math.Round(calculatedWeight / WeightStep) * WeightStep;
+                    var discreteWeight = Math.Round(calculatedWeight / WeightStep) * WeightStep;
 
                     // Округление вверх до ближайшего значения:
                     // var discreteWeight = Math.Ceiling(calculatedWeight / WeightStep) * WeightStep;

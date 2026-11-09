@@ -3,6 +3,6 @@
     "Protocol": "St",
     "Board": "None",
     "UseCamera": false,
-    "StateDynamic": false
+    "StateDynamic": true
   }
 }

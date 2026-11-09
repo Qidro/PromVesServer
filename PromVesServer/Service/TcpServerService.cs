@@ -194,9 +194,9 @@ namespace PromVesServer.Service
             }
         }
 
-        // Отправляет клиенту полный актуальный список вагонов каждые 200 мс.
-        // Каждая JSON-строка является отдельным TCP-сообщением прикладного
-        // протокола и заканчивается символом перевода строки.
+        // Ждёт добавления нового результата в хранилище и только после этого
+        // отправляет клиенту полный актуальный список вагонов. Каждая JSON-строка
+        // является отдельным TCP-сообщением и заканчивается переводом строки.
         private async Task HandleDynamicWeightClientAsync(
             TcpClient client,
             CancellationToken cancellationToken)
@@ -207,12 +207,34 @@ namespace PromVesServer.Service
 
                 while (!cancellationToken.IsCancellationRequested)
                 {
+                    // Для каждого цикла создаём собственный сигнал. Если результат
+                    // добавится до ожидания, TaskCompletionSource сохранит сигнал,
+                    // поэтому событие не будет потеряно.
+                    var resultAdded = new TaskCompletionSource<bool>(
+                        TaskCreationOptions.RunContinuationsAsynchronously);
+
+                    void OnResultAdded(RailcarWeightResult _)
+                    {
+                        resultAdded.TrySetResult(true);
+                    }
+
+                    _railcarWeightStorage.ResultAdded += OnResultAdded;
+                    try
+                    {
+                        await resultAdded.Task.WaitAsync(cancellationToken);
+                    }
+                    finally
+                    {
+                        // Отписываем обработчик после каждого ожидания, чтобы
+                        // подключение клиента не удерживалось в памяти.
+                        _railcarWeightStorage.ResultAdded -= OnResultAdded;
+                    }
+
                     var railcars = _railcarWeightStorage.GetAll();
                     var message = JsonSerializer.Serialize(railcars) + "\n";
                     byte[] buffer = Encoding.UTF8.GetBytes(message);
 
                     await stream.WriteAsync(buffer, cancellationToken);
-                    await Task.Delay(200, cancellationToken);
                 }
             }
             catch (OperationCanceledException)

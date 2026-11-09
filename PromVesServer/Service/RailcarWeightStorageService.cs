@@ -10,6 +10,10 @@ namespace PromVesServer.Service
         private readonly object _lock = new();
         private readonly List<RailcarWeightResult> _values = [];
 
+        // Событие вызывается после добавления нового результата в _values.
+        // TCP-клиенты используют его, чтобы отправлять данные только при изменении.
+        public event Action<RailcarWeightResult>? ResultAdded;
+
         // Добавляет завершённый результат в общий список.
         public void Add(RailcarWeightResult result)
         {
@@ -19,6 +23,10 @@ namespace PromVesServer.Service
             {
                 _values.Add(result);
             }
+
+            // Вызываем событие за пределами lock, чтобы обработчик не блокировал
+            // операции чтения и записи внутреннего списка.
+            ResultAdded?.Invoke(result);
         }
 
         // Возвращает копию списка, чтобы вызывающий код не мог изменить
