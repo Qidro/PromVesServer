@@ -266,11 +266,8 @@ namespace PromVesServer.Service
                 _railcarWeightStorage.ResultUpdated += OnResultUpdated;
                 try
                 {
-                    // При переподключении клиент сразу получает последнее
-                    // сохранённое взвешивание. Ошибка предыдущей отправки не
-                    // удаляет результат из singleton-хранилища.
-                    await SendLatestResultAsync();
-
+                    // При подключении старый результат не отправляется повторно.
+                    // Клиент получает данные только после нового ResultUpdated.
                     while (!connectionToken.IsCancellationRequested)
                     {
                         // Событие не теряется, если результат обновился во время
