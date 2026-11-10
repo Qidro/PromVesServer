@@ -32,10 +32,10 @@ namespace PromVesServer.Service
         private TcpListener? _listenerPN;
         private TcpListener? _listenerVideo;
         private TcpListener? _listenerDynamicWeight;
-        private int Port = 5002; //порт сервера веса
-        private int PortPN = 5003; //порт сервера кода АЦП
-        private int PortVideo = 5005; //порт сервера команд видеозаписи и фотографии
-        private int PortDynamicWeight = 5004; //порт результатов динамического взвешивания
+        private int Port = 5002; // Порт текущих значений обычного взвешивания.
+        private int PortPN = 5003; // Порт сервера кодов АЦП.
+        private int PortVideo = 5005; // Порт команд видеозаписи и фотографии.
+        private int PortDynamicWeight = 5004; // Порт итогов динамического взвешивания.
         public TcpServerService(
             ILogger<TcpServerService> logger,
             CounterStorageService storage,
@@ -139,8 +139,9 @@ namespace PromVesServer.Service
         }
 
         // Запускает отдельный TCP-сервер результатов динамического взвешивания.
-        // Клиент подключается к порту 5004 и получает JSON-массив всех вагонов,
-        // сохранённых в общем RailcarWeightStorageService.
+        // Клиент подключается к порту 5004 и получает JSON с последним вагоном
+        // из общего RailcarWeightStorageService. Хранилище само уведомляет
+        // обработчик клиента, когда результат заменён новым.
         public async Task StartDynamicWeightAsync(CancellationToken cancellationToken)
         {
             try
@@ -158,6 +159,9 @@ namespace PromVesServer.Service
                 {
                     try
                     {
+                        // Обработчик обслуживает одно соединение до EndDynamic,
+                        // отключения клиента или остановки приложения. После его
+                        // завершения цикл принимает следующее соединение.
                         TcpClient client = await _listenerDynamicWeight.AcceptTcpClientAsync(cancellationToken);
                         await HandleDynamicWeightClientAsync(client, cancellationToken);
                     }
@@ -194,47 +198,95 @@ namespace PromVesServer.Service
             }
         }
 
-        // Ждёт добавления нового результата в хранилище и только после этого
-        // отправляет клиенту полный актуальный список вагонов. Каждая JSON-строка
-        // является отдельным TCP-сообщением и заканчивается переводом строки.
+        // Принимает команды клиента и отправляет результаты только после обновления
+        // хранилища. Команда EndDynamic завершает текущее TCP-соединение.
         private async Task HandleDynamicWeightClientAsync(
             TcpClient client,
             CancellationToken cancellationToken)
         {
+            // Один токен управляет всеми задачами конкретного клиента:
+            // отправкой результатов, чтением EndDynamic и мониторингом сокета.
+            // Отмена любого из этих сценариев должна завершить всё соединение.
+            using var connectionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            Task? receiveTask = null;
+            Task? monitorTask = null;
+
             try
             {
                 NetworkStream stream = client.GetStream();
+                CancellationToken connectionToken = connectionCts.Token;
+                // Отправка результата и ответа Pong может происходить из разных
+                // задач. Один lock на запись не допускает перемешивания байтов
+                // двух сообщений в одном TCP-потоке.
+                using var writeLock = new SemaphoreSlim(1, 1);
+                var resultUpdated = new TaskCompletionSource<bool>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
 
-                while (!cancellationToken.IsCancellationRequested)
+                void OnResultUpdated(RailcarWeightResult _)
                 {
-                    // Для каждого цикла создаём собственный сигнал. Если результат
-                    // добавится до ожидания, TaskCompletionSource сохранит сигнал,
-                    // поэтому событие не будет потеряно.
-                    var resultAdded = new TaskCompletionSource<bool>(
-                        TaskCreationOptions.RunContinuationsAsynchronously);
+                    resultUpdated.TrySetResult(true);
+                }
 
-                    void OnResultAdded(RailcarWeightResult _)
-                    {
-                        resultAdded.TrySetResult(true);
-                    }
-
-                    _railcarWeightStorage.ResultAdded += OnResultAdded;
+                async Task SendMessageAsync(string message, CancellationToken token)
+                {
+                    await writeLock.WaitAsync(token);
                     try
                     {
-                        await resultAdded.Task.WaitAsync(cancellationToken);
+                        byte[] messageBytes = Encoding.UTF8.GetBytes(message);
+                        await stream.WriteAsync(messageBytes, token);
                     }
                     finally
                     {
-                        // Отписываем обработчик после каждого ожидания, чтобы
-                        // подключение клиента не удерживалось в памяти.
-                        _railcarWeightStorage.ResultAdded -= OnResultAdded;
+                        writeLock.Release();
+                    }
+                }
+
+                async Task SendLatestResultAsync()
+                {
+                    var railcars = _railcarWeightStorage.GetAll();
+                    if (railcars.Count == 0)
+                    {
+                        return;
                     }
 
-                    var railcars = _railcarWeightStorage.GetAll();
                     var message = JsonSerializer.Serialize(railcars) + "\n";
-                    byte[] buffer = Encoding.UTF8.GetBytes(message);
+                    _logger.LogInformation("Сообщение: "+ message.ToString());
+                    await SendMessageAsync(message, connectionToken);
+                }
 
-                    await stream.WriteAsync(buffer, cancellationToken);
+                Task SendPongAsync(CancellationToken token) =>
+                    SendMessageAsync("Pong\n", token);
+
+                // Приём команд и проверка сокета работают параллельно с отправкой
+                // результатов. Поэтому клиент может отправить EndDynamic даже в
+                // момент ожидания нового результата в хранилище.
+                receiveTask = ReceiveDynamicCommandAsync(stream, connectionCts, SendPongAsync);
+                monitorTask = MonitorDynamicConnectionAsync(client, connectionCts);
+
+                _railcarWeightStorage.ResultUpdated += OnResultUpdated;
+                try
+                {
+                    // При переподключении клиент сразу получает последнее
+                    // сохранённое взвешивание. Ошибка предыдущей отправки не
+                    // удаляет результат из singleton-хранилища.
+                    await SendLatestResultAsync();
+
+                    while (!connectionToken.IsCancellationRequested)
+                    {
+                        // Событие не теряется, если результат обновился во время
+                        // отправки: завершённый TaskCompletionSource сохранит
+                        // уведомление до следующего ожидания.
+                        await resultUpdated.Task.WaitAsync(connectionToken);
+                        resultUpdated = new TaskCompletionSource<bool>(
+                            TaskCreationOptions.RunContinuationsAsynchronously);
+                        await SendLatestResultAsync();
+                    }
+                }
+                finally
+                {
+                    // Удаляем обработчик, чтобы завершившееся соединение не осталось
+                    // подписанным на singleton-хранилище и не удерживалось в памяти.
+                    _railcarWeightStorage.ResultUpdated -= OnResultUpdated;
                 }
             }
             catch (OperationCanceledException)
@@ -251,7 +303,111 @@ namespace PromVesServer.Service
             }
             finally
             {
+                // Отмена безопасна для повторного вызова и гарантирует остановку
+                // чтения команд и проверки соединения перед закрытием сокета.
+                connectionCts.Cancel();
+
+                try
+                {
+                    if (receiveTask != null && monitorTask != null)
+                    {
+                        await Task.WhenAll(receiveTask, monitorTask);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Завершение фоновых задач соединения является штатным.
+                }
+
                 client.Close();
+            }
+        }
+
+        // Читает команды клиента построчно. Единственная команда этого сервера —
+        // EndDynamic: после её получения отменяем все задачи текущего соединения.
+        private async Task ReceiveDynamicCommandAsync(
+            NetworkStream stream,
+            CancellationTokenSource connectionCts,
+            Func<CancellationToken, Task> sendPongAsync)
+        {
+            try
+            {
+                using var reader = new StreamReader(
+                    stream,
+                    Encoding.UTF8,
+                    detectEncodingFromByteOrderMarks: false,
+                    bufferSize: 1024,
+                    leaveOpen: true);
+
+                while (!connectionCts.IsCancellationRequested)
+                {
+                    string? message = await reader.ReadLineAsync(connectionCts.Token);
+                    if (message == null)
+                    {
+                        connectionCts.Cancel();
+                        return;
+                    }
+
+                    if (string.Equals(message.Trim(), "EndDynamic", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogInformation("Получена команда EndDynamic. Соединение 5004 закрывается");
+                        connectionCts.Cancel();
+                        return;
+                    }
+
+                    if (string.Equals(message.Trim(), "Ping", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Ответ отправляется в том же соединении. SemaphoreSlim
+                        // в обработчике защищает его от параллельной отправки
+                        // вместе с результатом взвешивания.
+                        await sendPongAsync(connectionCts.Token);
+                        _logger.LogDebug("Получена команда Ping. Отправлен ответ Pong");
+                        continue;
+                    }
+
+                    _logger.LogWarning("Неизвестная команда сервера динамического взвешивания: {Command}", message);
+                }
+            }
+            catch (OperationCanceledException) when (connectionCts.IsCancellationRequested)
+            {
+                // Отмена означает закрытие текущего соединения.
+            }
+            catch (IOException ex)
+            {
+                _logger.LogDebug(ex, "Клиент динамического взвешивания разорвал соединение");
+                connectionCts.Cancel();
+            }
+        }
+
+        // Проверяет TCP-соединение раз в пять секунд. Свойство Connected само по
+        // себе не гарантирует актуальное состояние, поэтому используется Poll:
+        // readable-сокет с нулевым Available означает, что клиент отключился.
+        private async Task MonitorDynamicConnectionAsync(
+            TcpClient client,
+            CancellationTokenSource connectionCts)
+        {
+            try
+            {
+                while (!connectionCts.IsCancellationRequested)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), connectionCts.Token);
+
+                    if (client.Client.Poll(0, SelectMode.SelectRead) &&
+                        client.Client.Available == 0)
+                    {
+                        _logger.LogDebug("TCP-клиент динамического взвешивания отключился");
+                        connectionCts.Cancel();
+                        return;
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (connectionCts.IsCancellationRequested)
+            {
+                // Соединение закрывается другой задачей или приложением.
+            }
+            catch (ObjectDisposedException)
+            {
+                // Сокет уже закрыт обработчиком соединения.
             }
         }
 

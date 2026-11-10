@@ -137,9 +137,8 @@ namespace PromVesServer.Service
             if (completedRailcar != null)
             {
                 _logger.LogInformation(
-                    "Вагон {Number} распознан. Стороны: {Side1Weight}, {Side2Weight}, " +
-                    "{Side3Weight}, {Side4Weight} кг. Общий вес: {TotalWeight} кг",
-                    completedRailcar.Number,
+                    "Вагон распознан. Стороны: {Side1Weight}, {Side2Weight}, " +
+                    "{Side3Weight}, {Side4Weight} кг. Общий вес: {TotalWeight} кг",                  
                     completedRailcar.Side1Weight,
                     completedRailcar.Side2Weight,
                     completedRailcar.Side3Weight,
@@ -181,7 +180,6 @@ namespace PromVesServer.Service
 
             return new RailcarWeightResult
             {
-                Number = _nextNumber++,
                 Side1Weight = side1Weight,
                 Side2Weight = side2Weight,
                 Side3Weight = side3Weight,

@@ -7,9 +7,6 @@ namespace PromVesServer.Models
     // подключено меньше четырёх COM-портов.
     public class RailcarWeightResult
     {
-        // Порядковый номер результата в списке вагонов.
-        public long Number { get; init; }
-
         // Вес первой боковой стороны. Соответствует COM-порту 1.
         // Если порт 1 не используется, значение равно 0.
         public decimal Side1Weight { get; init; }

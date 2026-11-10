@@ -162,10 +162,10 @@ namespace PromVesServer.Service
                                 continue;
                             }
 
-                            _logger.LogDebug(
-                                "Получил сообщение {Port}: {Value}",
-                                NamePort,
-                                value);
+                            //_logger.LogDebug(
+                            //    "Получил сообщение {Port}: {Value}",
+                            //    NamePort,
+                            //    value);
 
                             _storage.UpdateValue(IdPort, value);
                             if (stateDynamic)
